@@ -206,6 +206,8 @@ def run(args):
                 dataset, stream, extractor, neo, args.methods, cfg, args, seed, description
             )
             for result in results:
+                counts = splits["adaptation"]["label_counts"]
+                prior = result["predicted_prior"]
                 result.update({
                     "stage": args.stage,
                     "seed": seed,
@@ -215,9 +217,16 @@ def run(args):
                     "ratio": stream.ratio,
                     "dominant_class": stream.dominant_class,
                     "split_sha256": split_digest,
-                    "adaptation_label_counts": splits["adaptation"]["label_counts"],
+                    "adaptation_label_counts": counts,
+                    "adaptation_updates": len(histories[result["method"]]),
+                    "fallback_rate": result["fallback_updates"] / len(histories[result["method"]]),
+                    "prior_total_variation": (
+                        0.5 * sum(abs(estimate - count / len(stream.adaptation))
+                                  for estimate, count in zip(prior, counts))
+                        if prior is not None else None
+                    ),
                     "observed_dominant_fraction": (
-                        splits["adaptation"]["label_counts"][stream.dominant_class] / len(stream.adaptation)
+                        counts[stream.dominant_class] / len(stream.adaptation)
                         if stream.dominant_class is not None else None
                     ),
                     "stream_wall_seconds": elapsed,

@@ -118,7 +118,12 @@ def controlled_stream(labels, adapt_size, validation_size, seed, ratio):
     matched = np.concatenate([pool[-validation_size:][:count] for pool, count in zip(pools, matched_counts)])
     adapt = np.random.default_rng(seed + 1).permutation(adapt).tolist()
     balanced = np.random.default_rng(seed + 2).permutation(balanced).tolist()
-    matched = balanced.copy() if ratio == 10 else np.random.default_rng(seed + 3).permutation(matched).tolist()
+    matched = np.random.default_rng(seed + 3).permutation(matched).tolist()
+    balanced_members, matched_members = set(balanced), set(matched)
+    # Store the order actually seen by both views of the shared validation pass.
+    matched = [index for index in balanced if index in matched_members] + [
+        index for index in matched if index not in balanced_members
+    ]
     return Stream(
         f"ratio_{ratio:03d}", ratio, dominant, adapt,
         {"balanced_validation": balanced, "matched_validation": matched},

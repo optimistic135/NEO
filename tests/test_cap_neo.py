@@ -95,6 +95,16 @@ class CAPNEOTest(unittest.TestCase):
             cap.update(self.features, oracle_labels=torch.zeros(len(self.features), dtype=torch.long))
         self.assertEqual(len(cap.features), 0)
 
+    def test_low_confidence_uses_neo_residual_and_no_gradient(self):
+        weight = self.head.weight.detach().clone()
+        cap = CAPNEO(self.head, "cap_pa", CAPConfig(confidence=1, min_fit_samples=2))
+        logits = cap.update(self.features.requires_grad_())
+        self.assertFalse(logits.requires_grad)
+        self.assertFalse(cap.features.requires_grad)
+        self.assertIn("low_confidence", cap.history[-1]["fallback_reasons"])
+        torch.testing.assert_close(cap.q, cap.prototypes @ self.features.detach().mean(dim=0))
+        torch.testing.assert_close(self.head.weight, weight)
+
 
 if __name__ == "__main__":
     unittest.main()

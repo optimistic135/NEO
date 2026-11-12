@@ -56,7 +56,7 @@ class Metrics:
         top1, top5 = accuracy(logits, targets, topk=(1, 5))
         self.correct1 += float(top1.item()) * len(targets) / 100
         self.correct5 += float(top5.item()) * len(targets) / 100
-        self.entropy += float(calculate_entropy(logits).sum().item())
+        self.entropy += float(calculate_entropy(logits.softmax(dim=1)).sum().item())
         self.count += len(targets)
         self.logits.append(logits)
         self.targets.append(targets)
