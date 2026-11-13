@@ -1,4 +1,20 @@
-# CAP-NEO on CIFAR-10-C
+# CAP-NEO on CIFAR-10-C and ImageNet-C
+
+## ImageNet-C
+
+Run from the repository root in the GPU environment used for original NEO:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -u run_cap_neo.py --dataset imagenet-c --stage all --data /data/user3/chenc/datasets/ImageNet-C --output cap_results/imagenet-c-l5 --device cuda
+```
+
+This runs baseline (with batchwise Softmax equivalence checks), ablation, imbalance and oracle, then writes the report. The command defaults to severity 5, batch size 64, workers 0 and seeds 1234, 2020 and 9999. It uses the original ImageNet NEO preprocessing and timm ViT-Base weights, downloading them on a cache miss. Flat and grouped directories are supported, including the `bur` spelling. The default list skips `zoom_blur`; pass an explicit `--corruptions` list to override it.
+
+Natural streams adapt on 512 distinct images and validate on the other 49,488 per corruption. Controlled streams add a uniform condition (512 distinct classes) and dominant class shares of 10%, 30%, 50%, 70%, 90% and 100%. With 50 images per class, a dominant class can supply at most 49 distinct adaptation images under the default holdout. The sampler uses each available image once before drawing repeats with replacement. Every controlled stream has 512 arrivals; the CSV records the number of distinct images. Repeats reduce effective sample size, so interpret the shrinkage estimate for these streams as a heuristic.
+
+The controlled validation set holds out the same one image per class across ratios for each seed and corruption. Balanced metrics weight those 1,000 images uniformly. Prior-matched metrics weight the same predictions by the target class distribution, including weighted entropy and 15-bin ECE. At 100% the matched metric is determined by the single held-out image of the dominant class. Use the balanced view to compare accuracy across all classes. Increasing `--controlled-validation-size` to a multiple of 1,000 reserves more images per class and leaves fewer distinct images for adaptation.
+
+## CIFAR-10-C
 
 The original `main.py` and `tta_library/neo.py` remain available. The CAP runner calls the original NEO forward on the exact same frozen ViT class-token features used by the new methods. It retains the repository's CIFAR-10 fine-tuned ViT-Base and ViT preprocessing configuration, pinned to Hugging Face revisions in `config.json`. The runner reads the original CIFAR-10-C arrays or the repository's converted `corruption/severity/0…9` image folders.
 

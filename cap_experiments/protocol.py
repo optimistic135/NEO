@@ -1,4 +1,4 @@
-"""CIFAR-10-C input and reproducible stream definitions."""
+"""Corruption datasets and reproducible stream definitions."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,13 +9,20 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset
 
-from dataset.selectedRotateImageFolder import SelectedRotateImageFolder
+from dataset.selectedRotateImageFolder import SelectedRotateImageFolder, te_transforms_imageC
 
 
 NUM_CLASSES = 10
 PER_LEVEL = 10_000
 PROCESSOR_ID = "google/vit-base-patch16-224-in21k"
 PROCESSOR_REVISION = "b4569560a39a0f1af58e3ddaf17facf20ab919b0"
+IMAGENET_CLASSES = 1000
+IMAGENET_GROUPS = {
+    "noise": ("gaussian_noise", "shot_noise", "impulse_noise"),
+    "blur": ("defocus_blur", "glass_blur", "motion_blur", "zoom_blur"),
+    "weather": ("snow", "frost", "fog", "brightness"),
+    "digital": ("contrast", "elastic_transform", "pixelate", "jpeg_compression"),
+}
 
 
 class CIFARArrays(Dataset):
@@ -68,6 +75,31 @@ def load_dataset(root, corruption, level, processor):
     return dataset, labels, sample_ids
 
 
+def imagenet_directory(root, corruption, level):
+    group = next(group for group, names in IMAGENET_GROUPS.items() if corruption in names)
+    parents = [root, root / group]
+    if group == "blur":
+        parents.append(root / "bur")
+    paths = [parent / corruption / str(level) for parent in parents]
+    found = {path.resolve(): path for path in paths if path.is_dir()}
+    if len(found) != 1:
+        raise ValueError(f"Expected one ImageNet-C directory for {corruption}: {paths}")
+    return next(iter(found.values()))
+
+
+def load_imagenet_dataset(root, corruption, level):
+    directory = imagenet_directory(root, corruption, level)
+    dataset = SelectedRotateImageFolder(
+        str(directory), te_transforms_imageC, original=True, rotation=False
+    )
+    labels = np.asarray([label for _, label in dataset.samples], dtype=np.int64)
+    if (len(dataset.classes) != IMAGENET_CLASSES
+            or not np.all(np.bincount(labels, minlength=IMAGENET_CLASSES) == 50)):
+        raise ValueError(f"Expected 1,000 ImageNet classes with 50 images each in {directory}")
+    sample_ids = [str(Path(path).relative_to(root)) for path, _ in dataset.samples]
+    return dataset, labels, sample_ids
+
+
 @dataclass(frozen=True)
 class Stream:
     name: str
@@ -75,6 +107,7 @@ class Stream:
     dominant_class: int | None
     adaptation: list[int]
     validation: dict[str, list[int]]
+    validation_priors: dict[str, list[float]] | None = None
 
 
 def natural_stream(size, adapt_size, seed):
@@ -130,20 +163,66 @@ def controlled_stream(labels, adapt_size, validation_size, seed, ratio):
     )
 
 
-def manifest(stream, labels, sample_ids):
+def controlled_imagenet_stream(labels, adapt_size, validation_size, seed, ratio):
+    """Hold out the same images per class at every ratio, including the uniform control."""
+    per_class = validation_size // IMAGENET_CLASSES
+    if not 1 <= per_class < 50 or validation_size % IMAGENET_CLASSES:
+        raise ValueError("ImageNet controlled validation needs 1–49 images per class")
+    rng = np.random.default_rng(seed)
+    pools = [rng.permutation(indices) for indices in np.split(
+        np.argsort(labels, kind="stable"), IMAGENET_CLASSES
+    )]
+    dominant = seed % IMAGENET_CLASSES if ratio else None
+    prior = np.full(IMAGENET_CLASSES, 1 / IMAGENET_CLASSES)
+    order = rng.permutation(IMAGENET_CLASSES)
+    counts = np.zeros(IMAGENET_CLASSES, dtype=int)
+    remaining = adapt_size
+    if dominant is not None:
+        share = ratio / 100
+        prior.fill((1 - share) / (IMAGENET_CLASSES - 1))
+        prior[dominant] = share
+        counts[dominant] = (adapt_size * ratio + 50) // 100
+        remaining -= counts[dominant]
+        order = order[order != dominant]
+    base, extra = divmod(remaining, len(order))
+    counts[order] = base
+    counts[order[:extra]] += 1
+
+    samples = []
+    for pool, count in zip(pools, counts):
+        available = pool[:-per_class]
+        samples.extend(available[:count])
+        if count > len(available):
+            samples.extend(rng.choice(available, count - len(available), replace=True))
+    adapt = np.random.default_rng(seed + 1).permutation(samples).tolist()
+    balanced = np.random.default_rng(seed + 2).permutation(
+        np.concatenate([pool[-per_class:] for pool in pools])
+    ).tolist()
+    return Stream(
+        f"ratio_{ratio:03d}", ratio, dominant, adapt,
+        {"balanced_validation": balanced, "matched_validation": balanced},
+        {"matched_validation": prior.tolist()},
+    )
+
+
+def manifest(stream, labels, sample_ids, num_classes=NUM_CLASSES):
     splits = {"adaptation": stream.adaptation, **stream.validation}
     adapt = set(stream.adaptation)
     for name, indices in splits.items():
-        if not indices or len(set(indices)) != len(indices):
+        repeats_allowed = name == "adaptation" and stream.validation_priors is not None
+        if not indices or (not repeats_allowed and len(set(indices)) != len(indices)):
             raise ValueError(f"Empty split or duplicate samples in {name}")
         if name != "adaptation" and adapt.intersection(indices):
             raise ValueError(f"Adaptation overlaps {name}")
 
-    return {
+    result = {
         name: {
             "indices": indices,
             "sample_ids": [sample_ids[index] for index in indices],
-            "label_counts": np.bincount(labels[indices], minlength=NUM_CLASSES).tolist(),
+            "label_counts": np.bincount(labels[indices], minlength=num_classes).tolist(),
         }
         for name, indices in splits.items()
     }
+    for name, prior in (stream.validation_priors or {}).items():
+        result[name]["target_prior"] = prior
+    return result

@@ -4,13 +4,12 @@ from collections import Counter
 from time import perf_counter
 
 import numpy as np
+from scipy.special import softmax
 import torch
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
-from calibration_library.metrics import ECELoss
 from tta_library.cap_neo import CAPConfig, CAPNEO, class_distribution
-from utils.cli_utils import accuracy
 from utils.utils import calculate_entropy
 
 
@@ -42,9 +41,13 @@ class Measurements:
 
 
 class Metrics:
-    def __init__(self):
-        self.logits = []
-        self.targets = []
+    def __init__(self, class_weights=None):
+        self.class_weights = class_weights
+        self.mass = 0.0
+        self.bin_mass = np.zeros(15)
+        self.bin_confidence = np.zeros(15)
+        self.bin_correct = np.zeros(15)
+        self.bin_boundaries = np.linspace(0, 1, 16)[1:]
         self.entropy = 0.0
         self.correct1 = 0.0
         self.correct5 = 0.0
@@ -53,23 +56,30 @@ class Metrics:
     def add(self, logits, targets):
         if not len(targets):
             return
-        top1, top5 = accuracy(logits, targets, topk=(1, 5))
-        self.correct1 += float(top1.item()) * len(targets) / 100
-        self.correct5 += float(top5.item()) * len(targets) / 100
-        self.entropy += float(calculate_entropy(logits.softmax(dim=1)).sum().item())
+        weights = np.ones(len(targets)) if self.class_weights is None else self.class_weights[targets.numpy()]
+        top = logits.topk(5, dim=1).indices.eq(targets[:, None]).numpy()
+        self.correct1 += np.dot(weights, top[:, 0])
+        self.correct5 += np.dot(weights, top.any(axis=1))
+        self.entropy += np.dot(weights, calculate_entropy(logits.softmax(dim=1)).numpy())
         self.count += len(targets)
-        self.logits.append(logits)
-        self.targets.append(targets)
+        self.mass += weights.sum()
+        probabilities = softmax(logits.numpy(), axis=1)
+        confidence = probabilities.max(axis=1)
+        correct = probabilities.argmax(axis=1) == targets.numpy()
+        bins = np.searchsorted(self.bin_boundaries, confidence, side="left").clip(0, 14)
+        self.bin_mass += np.bincount(bins, weights, minlength=15)
+        self.bin_confidence += np.bincount(bins, weights * confidence, minlength=15)
+        self.bin_correct += np.bincount(bins, weights * correct, minlength=15)
 
     def result(self):
-        logits = torch.cat(self.logits)
-        labels = torch.cat(self.targets)
+        if not self.mass:
+            raise ValueError("No evaluation samples with positive weight")
         return {
             "samples": self.count,
-            "top1": 100 * self.correct1 / self.count,
-            "top5": 100 * self.correct5 / self.count,
-            "entropy": self.entropy / self.count,
-            "ece": float(ECELoss().loss(logits.numpy(), labels.numpy(), n_bins=15, logits=True)),
+            "top1": float(100 * self.correct1 / self.mass),
+            "top5": float(100 * self.correct5 / self.mass),
+            "entropy": float(self.entropy / self.mass),
+            "ece": float(np.abs(self.bin_confidence - self.bin_correct).sum() / self.mass),
         }
 
 
@@ -123,7 +133,12 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
     timings = {method: Measurements(args.device) for method in methods}
     shared = Measurements(args.device)
     phases = ["adaptation", *stream.validation]
-    metrics = {method: {phase: Metrics() for phase in phases} for method in methods}
+    # ImageNet controlled validation has equal image counts in every class.
+    weights = {phase: np.asarray(prior) for phase, prior in (stream.validation_priors or {}).items()}
+    metrics = {
+        method: {phase: Metrics(weights.get(phase)) for phase in phases}
+        for method in methods
+    }
 
     validation = list(dict.fromkeys(index for indices in stream.validation.values() for index in indices))
     phase_members = {

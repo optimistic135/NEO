@@ -80,12 +80,14 @@ def _load_stage(directory):
 
 
 def _comparable(first, other):
+    first_args, other_args = first["arguments"], other["arguments"]
     fields = (
         "seeds", "corruptions", "level", "adapt_samples", "batch_size",
         "model_revision", "processor_revision",
     )
     return (
-        all(first["arguments"][key] == other["arguments"][key] for key in fields)
+        all(first_args[key] == other_args[key] for key in fields)
+        and first_args.get("dataset", "cifar10-c") == other_args.get("dataset", "cifar10-c")
         and first["model"] == other["model"]
         and first["processor"] == other["processor"]
         and first["cap"] == other["cap"]
@@ -195,6 +197,7 @@ def _plot_imbalance(summary, output):
         return
     figure = Figure(figsize=(10.4, 4.4), constrained_layout=True)
     axes = figure.subplots(1, 2, sharey=True)
+    ratios = sorted({int(row["stream"].split("_")[-1]) for row in controlled})
     for axis, phase, title in zip(
         axes, ("balanced_validation", "matched_validation"),
         ("Balanced validation", "Prior-matched validation"),
@@ -214,7 +217,7 @@ def _plot_imbalance(summary, output):
                 )
         axis.set_title(title)
         axis.set_xlabel("Target dominant class share in adaptation (%)")
-        axis.set_xticks(sorted({int(row["stream"].split("_")[-1]) for row in controlled}))
+        axis.set_xticks(ratios, ["Uniform" if ratio == 0 else str(ratio) for ratio in ratios])
         axis.grid(axis="y", alpha=0.25)
     axes[0].set_ylabel("Validation Top-1 accuracy (%)")
     axes[1].legend(frameon=False)
@@ -249,7 +252,8 @@ def _compare_legacy(rows, directory):
         if row["stage"] != "baseline":
             continue
         corruption, seed = row["corruption"], row["seed"]
-        file = directory / f"neo-cifar10-base-{seed}-{corruption}.json"
+        dataset = "imagenet" if row.get("dataset") == "imagenet-c" else "cifar10"
+        file = directory / f"neo-{dataset}-base-{seed}-{corruption}.json"
         if not file.is_file():
             continue
         original = json.loads(file.read_text())[corruption]
@@ -283,15 +287,9 @@ def _compare_baselines(rows):
                 raise ValueError(f"Baseline and ablation NEO disagree on {key} {metric}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--runs", nargs="+", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--reference-dir", type=Path, help="Optional original main.py results directory")
-    args = parser.parse_args()
-
+def generate_report(run_directories, output, reference_dir=None):
     configs, rows = {}, []
-    for directory in args.runs:
+    for directory in run_directories:
         configuration, stage_rows = _load_stage(directory)
         stage = configuration["arguments"]["stage"]
         if stage in configs:
@@ -303,31 +301,40 @@ def main():
     _verify_split_identity(rows)
     _compare_baselines(rows)
 
-    args.output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=True)
     overall = _aggregate(rows, ("stage", "stream", "method"))
     per_corruption = _aggregate(rows, ("stage", "stream", "corruption", "method"))
     natural_stage = "ablation" if "ablation" in configs else "baseline"
     methods = [row for row in overall if row["stream"] == "natural" and row["stage"] in {natural_stage, "oracle"}]
     diagnostics = _paired_diagnostics(rows)
-    _write_csv(args.output, "overall_summary.csv", overall)
-    _write_csv(args.output, "per_corruption_accuracy.csv", per_corruption)
-    _write_csv(args.output, "method_comparison.csv", methods)
-    _write_csv(args.output, "ablation_summary.csv", _ablation(rows))
-    _write_csv(args.output, "paired_diagnostics.csv", diagnostics)
-    if args.reference_dir is not None:
-        legacy = _compare_legacy(rows, args.reference_dir)
-        _write_csv(args.output, "legacy_baseline_comparison.csv", legacy)
+    _write_csv(output, "overall_summary.csv", overall)
+    _write_csv(output, "per_corruption_accuracy.csv", per_corruption)
+    _write_csv(output, "method_comparison.csv", methods)
+    _write_csv(output, "ablation_summary.csv", _ablation(rows))
+    _write_csv(output, "paired_diagnostics.csv", diagnostics)
+    if reference_dir is not None:
+        legacy = _compare_legacy(rows, reference_dir)
+        _write_csv(output, "legacy_baseline_comparison.csv", legacy)
         print(f"Original main.py comparisons: {len(legacy)} metric pairs (split identity unverified)")
-    _plot_imbalance(overall, args.output)
-    _plot_diagnostics(diagnostics, args.output)
-    (args.output / "report_config.json").write_text(
+    _plot_imbalance(overall, output)
+    _plot_diagnostics(diagnostics, output)
+    (output / "report_config.json").write_text(
         json.dumps({
             "stages": configs,
-            "run_directories": [str(directory.resolve()) for directory in args.runs],
-            "reference_directory": str(args.reference_dir.resolve()) if args.reference_dir else None,
+            "run_directories": [str(directory.resolve()) for directory in run_directories],
+            "reference_directory": str(reference_dir.resolve()) if reference_dir else None,
         }, indent=2) + "\n"
     )
-    print(f"Summarized {len(rows)} method/stream records in {args.output}")
+    print(f"Summarized {len(rows)} method/stream records in {output}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--runs", nargs="+", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--reference-dir", type=Path, help="Optional original main.py results directory")
+    args = parser.parse_args()
+    generate_report(args.runs, args.output, args.reference_dir)
 
 
 if __name__ == "__main__":
