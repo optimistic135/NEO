@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from tta_library.cap_neo import CAPConfig, CAPNEO, class_distribution
+from tta_library.plead_v2 import PLEADV2, V2_OPTIONS
 from utils.utils import calculate_entropy
 
 
@@ -119,12 +120,21 @@ def _maximum(*values):
 
 
 @torch.no_grad()
-def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, description):
+def evaluate_stream(
+    dataset, stream, extractor, neo, methods, cfg, args, seed, description,
+    *, v2_config=None, observe_logits=None,
+):
     start = perf_counter()
     neo.reset()
     head = neo.classifier
     neo.corrupt_class_center = neo.corrupt_class_center.to(head.weight.device)
-    caps = {method: CAPNEO(head, method, cfg) for method in methods if method != "neo"}
+    caps = {
+        method: (
+            PLEADV2(head, method, v2_config) if method in V2_OPTIONS
+            else CAPNEO(head, "cap_neo" if method == "plead_original" else method, cfg)
+        )
+        for method in methods if method != "neo"
+    }
     baseline = BaselineDiagnostics(head) if "neo" in methods else None
     parity = (
         CAPNEO(head, "cap_pa", CAPConfig(min_fit_samples=len(stream.adaptation) + 1))
@@ -132,6 +142,8 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
     )
     timings = {method: Measurements(args.device) for method in methods}
     shared = Measurements(args.device)
+    cross_view = Measurements(args.device)
+    cv_methods = {method for method in methods if V2_OPTIONS.get(method, (False, False))[0]}
     phases = ["adaptation", *stream.validation]
     # Reweighted validation views have equal image counts in every class.
     weights = {phase: np.asarray(prior) for phase, prior in (stream.validation_priors or {}).items()}
@@ -158,6 +170,11 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
                 raise ValueError("Unexpected ViT feature shape")
             if not torch.isfinite(features).all():
                 raise ValueError("ViT produced nonfinite features")
+            flipped = None
+            if adapting and cv_methods:
+                flipped = cross_view.measure(
+                    lambda: extractor(images.to(args.device, non_blocking=True).flip(-1)).float()
+                )
             for method in methods:
                 if method == "neo":
                     previous = neo.corrupt_class_center
@@ -171,11 +188,15 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
                         )
                 elif not adapting:
                     logits = timings[method].measure(lambda: caps[method].predict(features))
+                elif method in cv_methods:
+                    logits = timings[method].measure(lambda: caps[method].update(features, flipped))
                 else:
                     logits = timings[method].measure(lambda: caps[method].update(features))
                 if logits.shape != (len(labels), head.out_features) or not torch.isfinite(logits).all():
                     raise ValueError(f"{method} returned invalid logits")
                 logits = logits.cpu()
+                if observe_logits is not None:
+                    observe_logits(method, phase, offset, logits)
                 if adapting:
                     metrics[method]["adaptation"].add(logits, labels)
                 else:
@@ -193,6 +214,8 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
         fallbacks = Counter(reason for step in history for reason in step["fallback_reasons"])
         final = history[-1]
         timing = timings[method]
+        view_seconds = cross_view.seconds if method in cv_methods else 0.0
+        view_peak = cross_view.peak_gpu_mib if method in cv_methods else None
         row = {
             "method": method,
             "kappa": final["kappa"],
@@ -204,11 +227,18 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
             "fallback_updates": sum(bool(step["fallback_reasons"]) for step in history),
             "fallback_counts": dict(fallbacks),
             "shared_backbone_seconds": shared.seconds,
-            "method_seconds": timing.seconds,
-            "inference_seconds": shared.seconds + timing.seconds,
-            "peak_gpu_mib": _maximum(shared.peak_gpu_mib, timing.peak_gpu_mib),
+            "method_seconds": timing.seconds + view_seconds,
+            "inference_seconds": shared.seconds + timing.seconds + view_seconds,
+            "peak_gpu_mib": _maximum(shared.peak_gpu_mib, view_peak, timing.peak_gpu_mib),
             "method_peak_extra_gpu_mib": timing.peak_extra_gpu_mib,
         }
+        if v2_config is not None:
+            row.update({
+                "cross_view_seconds": view_seconds,
+                "cross_view": method in cv_methods,
+                "gamma_gate": V2_OPTIONS.get(method, (False, False))[1],
+                **{name: final.get(name) for name in ("gamma", "neff", "sxx", "correlation")},
+            })
         for phase, meter in metrics[method].items():
             row.update({f"{phase}_{key}": value for key, value in meter.result().items()})
         rows.append(row)
