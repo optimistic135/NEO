@@ -190,6 +190,24 @@ def _configuration(args, cfg, model_id, processor_id):
     }
 
 
+def load_backbone(args, model_id, processor_id):
+    if args.dataset == "imagenet-c":
+        model = timm.create_model(model_id, pretrained=True)
+        processor = None
+    else:
+        model = ViTForImageClassification.from_pretrained(model_id, revision=args.model_revision)
+        processor = ViTImageProcessor.from_pretrained(processor_id, revision=args.processor_revision)
+    model.to(args.device).eval().requires_grad_(False)
+    classes = CLASS_COUNTS[args.dataset]
+    neo = NEO(model, classes)
+    if neo.classifier.out_features != classes:
+        raise ValueError(f"Expected {classes} classifier outputs")
+    neo.imagenet_mask = None
+    extractor = neo.feature_extractor
+    neo.feature_extractor = nn.Identity()
+    return neo, extractor, processor
+
+
 def run(args):
     args.device = get_device() if args.device == "auto" else torch.device(args.device)
     if args.device.type == "cuda":
@@ -211,19 +229,7 @@ def run(args):
     write_json(config_path, configuration)
     print(f"Stage {args.stage}, {args.device}, model {model_id}, output {args.output}")
     set_reproducible(args.seeds[0])
-    if imagenet:
-        model = timm.create_model(model_id, pretrained=True)
-        processor = None
-    else:
-        model = ViTForImageClassification.from_pretrained(model_id, revision=args.model_revision)
-        processor = ViTImageProcessor.from_pretrained(processor_id, revision=args.processor_revision)
-    model.to(args.device).eval().requires_grad_(False)
-    neo = NEO(model, classes)
-    if neo.classifier.out_features != classes:
-        raise ValueError(f"Expected {classes} classifier outputs")
-    neo.imagenet_mask = None
-    extractor = neo.feature_extractor
-    neo.feature_extractor = nn.Identity()
+    neo, extractor, processor = load_backbone(args, model_id, processor_id)
 
     jobs = [(seed, corruption) for seed in args.seeds for corruption in args.corruptions]
     rows = []
