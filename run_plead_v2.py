@@ -3,6 +3,7 @@
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import asdict
+import fcntl
 import hashlib
 import json
 from pathlib import Path
@@ -198,9 +199,14 @@ def run(args):
 def main():
     args = parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    with (args.output / "run.log").open("a", buffering=1) as log:
-        with redirect_stdout(Tee(sys.stdout, log)), redirect_stderr(Tee(sys.stderr, log)):
-            run(args)
+    with (args.output / ".run.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit(f"An experiment already owns {args.output}") from None
+        with (args.output / "run.log").open("a", buffering=1) as log:
+            with redirect_stdout(Tee(sys.stdout, log)), redirect_stderr(Tee(sys.stderr, log)):
+                run(args)
 
 
 if __name__ == "__main__":
