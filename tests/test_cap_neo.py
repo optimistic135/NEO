@@ -72,27 +72,14 @@ class CAPNEOTest(unittest.TestCase):
             torch.tensor(cap.history[-1]["predicted_prior"]), expected_prior
         )
 
-    def test_oracle_recovers_known_scale_and_detects_single_class(self):
-        cap = CAPNEO(self.head, "cap_oracle_labels", CAPConfig(min_fit_samples=4))
-        labels = torch.arange(5).repeat_interleave(4)
-        offset = torch.ones(8)
-        cap.update(3 * cap.prototypes[labels] + offset, oracle_labels=labels)
-        self.assertAlmostEqual(cap.history[-1]["kappa"], 3.0, places=5)
-        torch.testing.assert_close(cap.q, cap.prototypes @ offset)
-        cap.reset()
-        labels = torch.zeros(4, dtype=torch.long)
-        cap.update(self.features[:4], oracle_labels=labels)
-        self.assertEqual(cap.history[-1]["kappa"], 0)
-        self.assertIn("insufficient_class_coverage", cap.history[-1]["fallback_reasons"])
-
     def test_shapes_nonfinite_and_labels(self):
         cap = CAPNEO(self.head)
         with self.assertRaises(ValueError):
             cap.update(self.features[:, :2])
         with self.assertRaises(ValueError):
             cap.update(self.features * float("nan"))
-        with self.assertRaises(ValueError):
-            cap.update(self.features, oracle_labels=torch.zeros(len(self.features), dtype=torch.long))
+        with self.assertRaises(TypeError):
+            cap.update(self.features, labels=torch.zeros(len(self.features), dtype=torch.long))
         self.assertEqual(len(cap.features), 0)
 
     def test_low_confidence_uses_neo_residual_and_no_gradient(self):

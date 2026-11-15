@@ -8,7 +8,8 @@ import torch
 from calibration_library.metrics import ECELoss
 from cap_experiments.evaluation import Metrics
 from cap_experiments.protocol import (
-    controlled_imagenet_stream, controlled_stream, imagenet_directory, manifest, natural_stream,
+    controlled_resampled_stream, controlled_stream, imagenet_directory, load_dataset,
+    manifest, natural_stream,
 )
 
 
@@ -62,11 +63,11 @@ class ImageNetProtocolTest(unittest.TestCase):
     def test_fixed_holdout_and_single_class_resampling(self):
         labels = np.repeat(np.arange(1000), 50)
         ids = list(range(len(labels)))
-        uniform = controlled_imagenet_stream(labels, 512, 1000, 2020, 0)
+        uniform = controlled_resampled_stream(labels, 512, 1000, 2020, 0, 1000)
         self.assertEqual(len(set(uniform.adaptation)), 512)
         self.assertEqual(len(set(labels[uniform.adaptation])), 512)
         for ratio in (10, 30, 50, 70, 90, 100):
-            stream = controlled_imagenet_stream(labels, 512, 1000, 2020, ratio)
+            stream = controlled_resampled_stream(labels, 512, 1000, 2020, ratio, 1000)
             splits = manifest(stream, labels, ids, 1000)
             self.assertEqual(len(stream.adaptation), 512)
             self.assertEqual(stream.validation, uniform.validation)
@@ -88,6 +89,39 @@ class ImageNetProtocolTest(unittest.TestCase):
             weighted.add(logits[batch:batch + 1], targets[batch:batch + 1])
         self.assertAlmostEqual(weighted.result()["top1"], 90)
         self.assertAlmostEqual(weighted.result()["ece"], abs(logits.softmax(1)[0, 0].item() - 0.9))
+
+
+class CIFAR100ProtocolTest(unittest.TestCase):
+    def test_reads_fine_labels_and_requested_severity(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            images = np.lib.format.open_memmap(
+                root / "fog.npy", mode="w+", dtype=np.uint8, shape=(50_000, 32, 32, 3),
+            )
+            images[40_000, 0, 0] = [10, 20, 30]
+            del images
+            np.save(root / "labels.npy", np.tile(np.repeat(np.arange(100), 100), 5))
+
+            def processor(images, return_tensors):
+                return {"pixel_values": torch.tensor([images.getpixel((0, 0))])}
+
+            dataset, labels, ids = load_dataset(root, "fog", 5, processor, 100)
+            self.assertEqual(np.bincount(labels).tolist(), [100] * 100)
+            pixels, label = dataset[ids.index(0)]
+            self.assertEqual(pixels.tolist(), [10, 20, 30])
+            self.assertEqual(label, 0)
+
+    def test_controlled_split_keeps_held_out_images_disjoint(self):
+        labels = np.repeat(np.arange(100), 100)
+        uniform = controlled_resampled_stream(labels, 512, 500, 2020, 0, 100)
+        single = controlled_resampled_stream(labels, 512, 500, 2020, 100, 100)
+        splits = manifest(single, labels, np.arange(len(labels)).tolist(), 100)
+        self.assertEqual(len(set(uniform.adaptation)), 512)
+        self.assertEqual(len(single.adaptation), 512)
+        self.assertEqual(len(set(single.adaptation)), 95)
+        self.assertEqual(single.validation, uniform.validation)
+        self.assertEqual(splits["balanced_validation"]["label_counts"], [5] * 100)
+        self.assertEqual(splits["matched_validation"]["target_prior"][20], 1)
 
 
 if __name__ == "__main__":

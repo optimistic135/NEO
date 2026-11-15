@@ -133,7 +133,7 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
     timings = {method: Measurements(args.device) for method in methods}
     shared = Measurements(args.device)
     phases = ["adaptation", *stream.validation]
-    # ImageNet controlled validation has equal image counts in every class.
+    # Reweighted validation views have equal image counts in every class.
     weights = {phase: np.asarray(prior) for phase, prior in (stream.validation_priors or {}).items()}
     metrics = {
         method: {phase: Metrics(weights.get(phase)) for phase in phases}
@@ -171,10 +171,6 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
                         )
                 elif not adapting:
                     logits = timings[method].measure(lambda: caps[method].predict(features))
-                elif method == "cap_oracle_labels":
-                    logits = timings[method].measure(
-                        lambda: caps[method].update(features, oracle_labels=labels.to(args.device))
-                    )
                 else:
                     logits = timings[method].measure(lambda: caps[method].update(features))
                 if logits.shape != (len(labels), head.out_features) or not torch.isfinite(logits).all():
@@ -199,7 +195,6 @@ def evaluate_stream(dataset, stream, extractor, neo, methods, cfg, args, seed, d
         timing = timings[method]
         row = {
             "method": method,
-            "oracle": method == "cap_oracle_labels",
             "kappa": final["kappa"],
             "lambda": final["lambda"],
             "correction_norm": final["correction_norm"],

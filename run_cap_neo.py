@@ -21,9 +21,9 @@ from transformers import ViTForImageClassification, ViTImageProcessor
 
 from cap_experiments.evaluation import evaluate_stream
 from cap_experiments.protocol import (
-    IMAGENET_CLASSES, PROCESSOR_ID, PROCESSOR_REVISION, controlled_imagenet_stream,
-    controlled_stream, imagenet_directory, load_dataset, load_imagenet_dataset, manifest,
-    natural_stream,
+    CIFAR100_CLASSES, IMAGENET_CLASSES, NUM_CLASSES, PROCESSOR_ID, PROCESSOR_REVISION,
+    controlled_resampled_stream, controlled_stream, imagenet_directory, load_dataset,
+    load_imagenet_dataset, manifest, natural_stream,
 )
 from factories import all_corruptions
 from tta_library.cap_neo import CAPConfig, METHODS
@@ -33,14 +33,18 @@ from utils.utils import get_device, set_reproducible
 
 MODEL_ID = "nateraw/vit-base-patch16-224-cifar10"
 MODEL_REVISION = "b55eeb4221d3a568f627078ed6f27b967810be3d"
+CIFAR100_MODEL = "avanishd/vit-base-patch16-224-in21k-finetuned-cifar100"
+CIFAR100_REVISION = "1dc8766c25b7cd31b4bb90f1d2c9ae93f24a3e60"
 IMAGENET_MODEL = "vit_base_patch16_224"
+CLASS_COUNTS = {
+    "cifar10-c": NUM_CLASSES, "cifar100-c": CIFAR100_CLASSES, "imagenet-c": IMAGENET_CLASSES,
+}
 SEEDS = (1234, 2020, 9999)
 RATIOS = (10, 30, 50, 70, 90, 100)
 STAGE_METHODS = {
     "baseline": ("neo",),
-    "ablation": METHODS[:-1],
-    "imbalance": METHODS[:-1],
-    "oracle": ("cap_oracle_labels",),
+    "ablation": METHODS,
+    "imbalance": METHODS,
 }
 
 
@@ -61,7 +65,7 @@ class Tee:
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stage", required=True, choices=(*STAGE_METHODS, "all"))
-    parser.add_argument("--dataset", choices=("cifar10-c", "imagenet-c"), default="cifar10-c")
+    parser.add_argument("--dataset", choices=CLASS_COUNTS, default="cifar10-c")
     parser.add_argument("--data", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--methods", nargs="+", choices=METHODS)
@@ -80,21 +84,24 @@ def parse_args():
     parser.add_argument("--min-alignment", type=float, default=CAPConfig.min_alignment)
     parser.add_argument("--eps", type=float, default=CAPConfig.eps)
     parser.add_argument("--device", default="auto")
-    parser.add_argument("--model-revision", default=MODEL_REVISION)
-    parser.add_argument("--processor-revision", default=PROCESSOR_REVISION)
+    parser.add_argument("--model-revision")
+    parser.add_argument("--processor-revision")
     parser.add_argument("--no-progress", action="store_true")
     args = parser.parse_args()
     imagenet = args.dataset == "imagenet-c"
+    cifar100 = args.dataset == "cifar100-c"
+    resampled = imagenet or cifar100
+    classes = CLASS_COUNTS[args.dataset]
     if args.corruptions is None:
         args.corruptions = [name for name in all_corruptions if not imagenet or name != "zoom_blur"]
-    args.ratios = args.ratios or list((0, *RATIOS) if imagenet else RATIOS)
+    args.ratios = args.ratios or list((0, *RATIOS) if resampled else RATIOS)
     if args.controlled_validation_size is None:
-        args.controlled_validation_size = IMAGENET_CLASSES if imagenet else 480
+        args.controlled_validation_size = {"imagenet-c": 1000, "cifar100-c": 500, "cifar10-c": 480}[args.dataset]
     if args.stage == "all" and args.methods:
         parser.error("--methods requires a single stage")
     args.methods = args.methods or list(STAGE_METHODS.get(args.stage, ()))
     if not set(args.methods) <= set(STAGE_METHODS.get(args.stage, ())):
-        parser.error("The oracle is isolated from unsupervised stages")
+        parser.error("The baseline stage only supports neo")
     if any(len(items) != len(set(items)) for items in (
         args.methods, args.corruptions, args.seeds, args.ratios,
     )):
@@ -104,13 +111,13 @@ def parse_args():
         parser.error("Invalid sample, batch or worker count")
     if any(not 0 <= seed < 2**32 for seed in args.seeds):
         parser.error("Seeds must be in [0, 2**32)")
-    if not imagenet and 0 in args.ratios:
+    if not resampled and 0 in args.ratios:
         parser.error("CIFAR-10-C uses 10% as its uniform control")
-    if args.stage in {"imbalance", "oracle", "all"}:
+    if args.stage in {"imbalance", "all"}:
         size = args.controlled_validation_size
-        if imagenet and (not IMAGENET_CLASSES <= size < 50_000 or size % IMAGENET_CLASSES):
-            parser.error("ImageNet controlled validation size must be a multiple of 1000 from 1000 to 49000")
-        if not imagenet and (size < 10 or size % 10 or args.adapt_samples + size > 1000):
+        if resampled and (not classes <= size < dataset_size or size % classes):
+            parser.error(f"Controlled validation size must be a multiple of {classes} below {dataset_size}")
+        if not resampled and (size < 10 or size % 10 or args.adapt_samples + size > 1000):
             parser.error("Controlled validation size must be a positive multiple of ten and fit with adaptation")
     args.data, args.output = args.data.resolve(), args.output.resolve()
     if not args.data.is_dir():
@@ -123,6 +130,12 @@ def parse_args():
                 imagenet_directory(args.data, corruption, args.level)
             except ValueError as error:
                 parser.error(str(error))
+    elif cifar100:
+        args.model_revision = args.model_revision or CIFAR100_REVISION
+        args.processor_revision = args.processor_revision or args.model_revision
+    else:
+        args.model_revision = args.model_revision or MODEL_REVISION
+        args.processor_revision = args.processor_revision or PROCESSOR_REVISION
     return args
 
 
@@ -187,8 +200,10 @@ def run(args):
         args.min_coverage, args.min_alignment, args.eps,
     )
     imagenet = args.dataset == "imagenet-c"
-    model_id = IMAGENET_MODEL if imagenet else MODEL_ID
-    processor_id = "te_transforms_imageC" if imagenet else PROCESSOR_ID
+    cifar100 = args.dataset == "cifar100-c"
+    classes = CLASS_COUNTS[args.dataset]
+    model_id = {"cifar10-c": MODEL_ID, "cifar100-c": CIFAR100_MODEL, "imagenet-c": IMAGENET_MODEL}[args.dataset]
+    processor_id = "te_transforms_imageC" if imagenet else (model_id if cifar100 else PROCESSOR_ID)
     configuration = _configuration(args, cfg, model_id, processor_id)
     config_path = args.output / "config.json"
     if config_path.exists() and json.loads(config_path.read_text()) != configuration:
@@ -201,9 +216,8 @@ def run(args):
         processor = None
     else:
         model = ViTForImageClassification.from_pretrained(model_id, revision=args.model_revision)
-        processor = ViTImageProcessor.from_pretrained(PROCESSOR_ID, revision=args.processor_revision)
+        processor = ViTImageProcessor.from_pretrained(processor_id, revision=args.processor_revision)
     model.to(args.device).eval().requires_grad_(False)
-    classes = IMAGENET_CLASSES if imagenet else 10
     neo = NEO(model, classes)
     if neo.classifier.out_features != classes:
         raise ValueError(f"Expected {classes} classifier outputs")
@@ -219,15 +233,17 @@ def run(args):
         if imagenet:
             dataset, labels, sample_ids = load_imagenet_dataset(args.data, corruption, args.level)
         else:
-            dataset, labels, sample_ids = load_dataset(args.data, corruption, args.level, processor)
+            dataset, labels, sample_ids = load_dataset(args.data, corruption, args.level, processor, classes)
         streams = []
         if args.stage != "imbalance":
             streams.append(natural_stream(len(dataset), args.adapt_samples, seed))
-        if args.stage in {"imbalance", "oracle"}:
-            build_stream = controlled_imagenet_stream if imagenet else controlled_stream
-            streams.extend(build_stream(
-                labels, args.adapt_samples, args.controlled_validation_size, seed, ratio
-            ) for ratio in args.ratios)
+        if args.stage == "imbalance":
+            for ratio in args.ratios:
+                stream_args = (labels, args.adapt_samples, args.controlled_validation_size, seed, ratio)
+                if args.dataset == "cifar10-c":
+                    streams.append(controlled_stream(*stream_args))
+                else:
+                    streams.append(controlled_resampled_stream(*stream_args, classes))
         for stream in streams:
             path = args.output / "runs" / str(seed) / corruption / f"{stream.name}.json"
             splits = manifest(stream, labels, sample_ids, classes)

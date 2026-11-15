@@ -13,6 +13,7 @@ from dataset.selectedRotateImageFolder import SelectedRotateImageFolder, te_tran
 
 
 NUM_CLASSES = 10
+CIFAR100_CLASSES = 100
 PER_LEVEL = 10_000
 PROCESSOR_ID = "google/vit-base-patch16-224-in21k"
 PROCESSOR_REVISION = "b4569560a39a0f1af58e3ddaf17facf20ab919b0"
@@ -28,7 +29,7 @@ IMAGENET_GROUPS = {
 class CIFARArrays(Dataset):
     """Read a single severity from the original arrays without duplicating images."""
 
-    def __init__(self, root, corruption, level, processor):
+    def __init__(self, root, corruption, level, processor, num_classes):
         start = (level - 1) * PER_LEVEL
         stop = start + PER_LEVEL
         images = np.load(root / f"{corruption}.npy", mmap_mode="r", allow_pickle=False)
@@ -37,7 +38,7 @@ class CIFARArrays(Dataset):
         labels = np.load(root / "labels.npy", allow_pickle=False)
         if labels.shape == (5 * PER_LEVEL,):
             labels = labels[start:stop]
-        if labels.shape != (PER_LEVEL,) or not np.isin(labels, np.arange(NUM_CLASSES)).all():
+        if labels.shape != (PER_LEVEL,) or not np.isin(labels, np.arange(num_classes)).all():
             raise ValueError("labels.npy must contain one or five aligned sets of 10,000 CIFAR labels")
 
         self.images = images[start:stop]
@@ -56,22 +57,25 @@ class CIFARArrays(Dataset):
         return pixels, label
 
 
-def load_dataset(root, corruption, level, processor):
+def load_dataset(root, corruption, level, processor, num_classes=NUM_CLASSES):
     if (root / "labels.npy").is_file():
-        dataset = CIFARArrays(root, corruption, level, processor)
+        dataset = CIFARArrays(root, corruption, level, processor, num_classes)
         sample_ids = [index for index, _ in dataset.samples]
     else:
         directory = root / corruption / str(level)
         dataset = SelectedRotateImageFolder(
             str(directory), None, original=True, rotation=False, processor=processor
         )
-        if dataset.class_to_idx != {str(i): i for i in range(NUM_CLASSES)}:
-            raise ValueError(f"Expected class folders 0 through 9 in {directory}")
+        if set(dataset.classes) != {str(i) for i in range(num_classes)}:
+            raise ValueError(f"Expected numeric class folders 0 through {num_classes - 1} in {directory}")
+        # ImageFolder sorts names lexicographically, so its index for folder "10" is 2.
+        dataset.samples = [(path, int(dataset.classes[index])) for path, index in dataset.samples]
         sample_ids = [str(Path(path).relative_to(root)) for path, _ in dataset.samples]
     # ImageFolder.targets is not reordered by SelectedRotateImageFolder's shuffle.
     labels = np.asarray([label for _, label in dataset.samples], dtype=np.int64)
-    if len(dataset) != PER_LEVEL or not np.all(np.bincount(labels, minlength=NUM_CLASSES) == 1000):
-        raise ValueError(f"Expected 10,000 CIFAR-10-C images with 1,000 per class for {corruption}")
+    per_class = PER_LEVEL // num_classes
+    if len(dataset) != PER_LEVEL or not np.all(np.bincount(labels, minlength=num_classes) == per_class):
+        raise ValueError(f"Expected 10,000 CIFAR images with {per_class} per class for {corruption}")
     return dataset, labels, sample_ids
 
 
@@ -163,23 +167,23 @@ def controlled_stream(labels, adapt_size, validation_size, seed, ratio):
     )
 
 
-def controlled_imagenet_stream(labels, adapt_size, validation_size, seed, ratio):
+def controlled_resampled_stream(labels, adapt_size, validation_size, seed, ratio, num_classes):
     """Hold out the same images per class at every ratio, including the uniform control."""
-    per_class = validation_size // IMAGENET_CLASSES
-    if not 1 <= per_class < 50 or validation_size % IMAGENET_CLASSES:
-        raise ValueError("ImageNet controlled validation needs 1–49 images per class")
+    per_class = validation_size // num_classes
+    if not 1 <= per_class < len(labels) // num_classes or validation_size % num_classes:
+        raise ValueError("Controlled validation must reserve the same positive count in each class")
     rng = np.random.default_rng(seed)
     pools = [rng.permutation(indices) for indices in np.split(
-        np.argsort(labels, kind="stable"), IMAGENET_CLASSES
+        np.argsort(labels, kind="stable"), num_classes
     )]
-    dominant = seed % IMAGENET_CLASSES if ratio else None
-    prior = np.full(IMAGENET_CLASSES, 1 / IMAGENET_CLASSES)
-    order = rng.permutation(IMAGENET_CLASSES)
-    counts = np.zeros(IMAGENET_CLASSES, dtype=int)
+    dominant = seed % num_classes if ratio else None
+    prior = np.full(num_classes, 1 / num_classes)
+    order = rng.permutation(num_classes)
+    counts = np.zeros(num_classes, dtype=int)
     remaining = adapt_size
     if dominant is not None:
         share = ratio / 100
-        prior.fill((1 - share) / (IMAGENET_CLASSES - 1))
+        prior.fill((1 - share) / (num_classes - 1))
         prior[dominant] = share
         counts[dominant] = (adapt_size * ratio + 50) // 100
         remaining -= counts[dominant]

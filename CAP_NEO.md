@@ -1,4 +1,16 @@
-# CAP-NEO on CIFAR-10-C and ImageNet-C
+# CAP-NEO on CIFAR-100-C, CIFAR-10-C and ImageNet-C
+
+## CIFAR-100-C
+
+Run from the repository root in the existing CAP-NEO GPU environment. Replace the data path if your server uses a different directory.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -u run_cap_neo.py --dataset cifar100-c --stage all --data /data/user3/chenc/datasets/CIFAR-100-C --output cap_results/cifar100-c-l5 --device cuda
+```
+
+The runner reads fine labels from `labels.npy` and images from each corruption's `.npy` file, or reads folders named `corruption/severity/0…99`. All methods use the same [CIFAR-100 fine-tuned ViT-Base](https://huggingface.co/avanishd/vit-base-patch16-224-in21k-finetuned-cifar100) checkpoint and its image processor, pinned to the same model repository revision by default. The first run populates the Hugging Face cache. The `all` stage runs baseline, ablation and imbalance, then writes the report.
+
+The default natural protocol uses 15 corruptions, severity 5, seeds 1234, 2020 and 9999, batch size 64, and 512 distinct images for adaptation followed by 9,488 for validation. The imbalance stage evaluates a uniform condition and dominant-class shares of 10%, 30%, 50%, 70%, 90% and 100%. Each seed and corruption has a fixed set of five held-out images per class. A controlled stream has 512 arrivals and draws repeats only after exhausting the available images in a class. At 100%, 95 distinct images supply the 512 adaptation arrivals and five held-out images determine the prior-matched metrics. Balanced metrics give the 500 held-out images equal weight. Prior-matched metrics reweight the same predictions, including entropy and 15-bin ECE. The CSV records both adaptation arrivals and distinct images.
 
 ## ImageNet-C
 
@@ -8,7 +20,7 @@ Run from the repository root in the GPU environment used for original NEO:
 CUDA_VISIBLE_DEVICES=0 python -u run_cap_neo.py --dataset imagenet-c --stage all --data /data/user3/chenc/datasets/ImageNet-C --output cap_results/imagenet-c-l5 --device cuda
 ```
 
-This runs baseline (with batchwise Softmax equivalence checks), ablation, imbalance and oracle, then writes the report. The command defaults to severity 5, batch size 64, workers 0 and seeds 1234, 2020 and 9999. It uses the original ImageNet NEO preprocessing and timm ViT-Base weights, downloading them on a cache miss. Flat and grouped directories are supported, including the `bur` spelling. The default list skips `zoom_blur`; pass an explicit `--corruptions` list to override it.
+This runs baseline (with batchwise Softmax equivalence checks), ablation and imbalance, then writes the report. The command defaults to severity 5, batch size 64, workers 0 and seeds 1234, 2020 and 9999. It uses the original ImageNet NEO preprocessing and timm ViT-Base weights, downloading them on a cache miss. Flat and grouped directories are supported, including the `bur` spelling. The default list skips `zoom_blur`. Pass an explicit `--corruptions` list to override it.
 
 Natural streams adapt on 512 distinct images and validate on the other 49,488 per corruption. Controlled streams add a uniform condition (512 distinct classes) and dominant class shares of 10%, 30%, 50%, 70%, 90% and 100%. With 50 images per class, a dominant class can supply at most 49 distinct adaptation images under the default holdout. The sampler uses each available image once before drawing repeats with replacement. Every controlled stream has 512 arrivals; the CSV records the number of distinct images. Repeats reduce effective sample size, so interpret the shrinkage estimate for these streams as a heuristic.
 
@@ -58,11 +70,8 @@ python -u run_cap_neo.py --stage ablation --data "$DATA" --output "$RUNS/ablatio
 # Stage 3: four label-free methods on six controlled adaptation priors.
 python -u run_cap_neo.py --stage imbalance --data "$DATA" --output "$RUNS/imbalance" --device cuda
 
-# Stage 4: offline label oracle on both natural and controlled streams.
-python -u run_cap_neo.py --stage oracle --data "$DATA" --output "$RUNS/oracle" --device cuda
-
 python report_cap_neo.py \
-  --runs "$RUNS/baseline" "$RUNS/ablation" "$RUNS/imbalance" "$RUNS/oracle" \
+  --runs "$RUNS/baseline" "$RUNS/ablation" "$RUNS/imbalance" \
   --output "$RUNS/report"
 BASH
 ```
@@ -98,7 +107,7 @@ The CAP runner defaults to workers 0. Each stage displays progress by seed and c
 - Natural stream: use the original seeded random partition into 512 adaptation and 9,488 validation images. Materialize an independently seeded order for each split. This removes dependence on model initialization, prior corruptions and logging from the order used for comparisons.
 - Controlled streams: draw without replacement. Choose dominant class `seed % 10` and distribute the remaining slots as evenly as possible over the nine other classes. Report both target and achieved dominant shares. At 10%, distribute all slots as evenly as integer counts allow. At 100%, adaptation contains only the dominant class.
 - Controlled validation: each view contains 480 held-out images. The balanced view contains 48 per class and is fixed across all ratios for a seed and corruption. The matched view applies the target adaptation ratio to its own counts. The two views can overlap and are identical at 10%. A shared frozen forward over their union avoids duplicate feature extraction. Both views are disjoint from adaptation.
-- Adaptation metrics use each batch's logits after updating from that batch, matching NEO's online scoring time. Validation uses the final correction throughout. Labels in formal methods reach only the sampler or scoring code. Oracle labels reach only the separate oracle stage and only during adaptation.
+- Adaptation metrics use each batch's logits after updating from that batch, matching NEO's online scoring time. Validation uses the final correction throughout. Labels reach only the sampler and scoring code.
 - The backbone and classifier weights are frozen. Each batch goes through the backbone once per stream, shared by all selected methods. Predictions and metrics consume each batch before the next arrives. The bank contains the feature vectors and raw logits from all adaptation batches seen so far.
 
 ## Estimator and ablations
@@ -129,9 +138,8 @@ The shrinkage estimate assumes residual variability across the bank is informati
 | `neo_shrink` | κ = 0 | Enabled |
 | `cap_pa` | Soft predicted prior | λ = 1 |
 | `cap_neo` | Soft predicted prior | Enabled |
-| `cap_oracle_labels` | Adaptation label one-hot prior | Enabled |
 
-A single true class leaves the oracle's centered prototype fit unidentified. The formal methods can only detect insufficient *predicted* coverage. A confidently misclassified single-class stream can still appear to have multiple classes, so inspect estimated prior error and fallback frequency together. The label oracle probes the prototype model and κ estimator, and the classifier's geometry can still limit its benefit. No clean-pair shift metric is generated by this runner. Its configuration explicitly marks that optional diagnostic as skipped.
+The class coverage check uses predictions. A confidently misclassified single-class stream can still appear to have multiple classes, so inspect estimated prior error and fallback frequency together. The configuration marks the optional clean-pair shift diagnostic as skipped.
 
 ## Files and interpretation
 
@@ -139,4 +147,4 @@ Each stage writes `config.json`, `run.log`, `per_corruption.csv`, and one JSON p
 
 `shared_backbone_seconds` includes transfer of the image batch to the selected device and extraction. `method_seconds` times the method's adaptation and prediction calls with GPU synchronization. It includes the diagnostics recorded inside CAP updates. Original NEO diagnostics and the stage-1 equivalence check are recorded separately from that method's timing. `inference_seconds` sums shared backbone and method times. `stream_wall_seconds` covers the complete stream, including loading, metrics and diagnostics. `peak_gpu_mib` is the peak allocated GPU memory observed during the shared backbone and that method's calls. It includes co-resident states when methods are run together. `method_peak_extra_gpu_mib` measures additional allocations above memory resident immediately before each method call. For isolated GPU peaks, repeat `--stage ablation --methods <method>` in a separate output directory per method. CPU runs leave GPU memory fields blank.
 
-The report writes overall and per-corruption tables, paired ablation deltas, oracle comparisons and κ/λ diagnostics. It also writes imbalance and diagnostic plots as PNG and SVG. Overall metrics are averaged over corruptions within each seed before computing the mean and sample standard deviation over seeds. Accuracy deltas are in percentage points. Use `method_comparison.csv` for natural-stream method results and `ablation_summary.csv` for paired differences. If CAP-NEO loses accuracy, inspect soft-prior total variation, κ alignment and fallback counts in the stream JSONs, and compare κ/λ with paired accuracy changes before attributing the difference to a module.
+The report writes overall and per-corruption tables, paired ablation deltas and κ/λ diagnostics. It also writes imbalance and diagnostic plots as PNG and SVG. Overall metrics are averaged over corruptions within each seed before computing the mean and sample standard deviation over seeds. Accuracy deltas are in percentage points. Use `method_comparison.csv` for natural-stream method results and `ablation_summary.csv` for paired differences. If CAP-NEO loses accuracy, inspect soft-prior total variation, κ alignment and fallback counts in the stream JSONs, and compare κ/λ with paired accuracy changes before attributing the difference to a module.

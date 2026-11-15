@@ -7,7 +7,7 @@ import torch
 from torch.nn import functional as F
 
 
-METHODS = ("neo", "neo_shrink", "cap_pa", "cap_neo", "cap_oracle_labels")
+METHODS = ("neo", "neo_shrink", "cap_pa", "cap_neo")
 
 
 @dataclass(frozen=True)
@@ -97,15 +97,11 @@ class CAPNEO:
         self.prototypes = self.weight - self.weight.mean(dim=0, keepdim=True)
         self.use_prior = method != "neo_shrink"
         self.use_shrinkage = method != "cap_pa"
-        self.oracle = method == "cap_oracle_labels"
         self.reset()
 
     def reset(self):
         self.features = self.weight.new_empty((0, self.width))
         self.raw_logits = self.weight.new_empty((0, self.classes))
-        self.label_bank = (
-            torch.empty(0, dtype=torch.long, device=self.weight.device) if self.oracle else None
-        )
         self.q = self.weight.new_zeros(self.classes)
         self.history = []
 
@@ -126,21 +122,11 @@ class CAPNEO:
         return logits - self.q
 
     @torch.no_grad()
-    def update(self, features, *, oracle_labels=None):
+    def update(self, features):
         features, logits = self._raw(features)
-        if self.oracle:
-            if (
-                oracle_labels is None or oracle_labels.shape != (len(features),)
-                or oracle_labels.dtype != torch.long or oracle_labels.device != features.device
-                or not ((oracle_labels >= 0) & (oracle_labels < self.classes)).all()
-            ):
-                raise ValueError("Oracle requires valid adaptation labels on the feature device")
-        elif oracle_labels is not None:
-            raise ValueError("Unsupervised methods cannot receive labels")
 
         bank = torch.cat((self.features, features))
         raw_bank = torch.cat((self.raw_logits, logits))
-        labels = torch.cat((self.label_bank, oracle_labels)) if self.oracle else None
         previous = self.q
         probabilities = (raw_bank - previous).softmax(dim=1)
         confidence, predicted = probabilities.max(dim=1)
@@ -151,16 +137,10 @@ class CAPNEO:
         fit = {"fit_count": 0, "covered_classes": 0, "alignment": None}
         residuals = bank
         if self.use_prior:
-            if probabilities_valid or self.oracle:
-                if self.oracle:
-                    priors = F.one_hot(labels, num_classes=self.classes).to(bank.dtype)
-                    assignments = labels
-                    eligible = torch.ones_like(confident)
-                else:
-                    priors, assignments, eligible = probabilities, predicted, confident
-                expected = priors @ self.prototypes
+            if probabilities_valid:
+                expected = probabilities @ self.prototypes
                 scale, prior_reason, fit = _fit_scale(
-                    bank, expected, assignments, eligible, self.config
+                    bank, expected, predicted, confident, self.config
                 )
                 if scale:
                     residuals = bank - scale * expected
@@ -194,7 +174,7 @@ class CAPNEO:
             corrected = logits
             correction_reason = "nonfinite_previous_correction"
 
-        self.features, self.raw_logits, self.label_bank, self.q = bank, raw_bank, labels, candidate
+        self.features, self.raw_logits, self.q = bank, raw_bank, candidate
         distribution = (
             class_distribution(probabilities, predicted) if probabilities_valid
             else {"predicted_prior": None, "predicted_argmax_prior": None}

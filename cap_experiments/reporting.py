@@ -21,7 +21,7 @@ DIAGNOSTICS = (
 )
 COLORS = {
     "neo": "#343a40", "neo_shrink": "#0072b2", "cap_pa": "#009e73",
-    "cap_neo": "#d55e00", "cap_oracle_labels": "#8b58a1",
+    "cap_neo": "#d55e00",
 }
 LEGACY_PHASES = {"adaptation": "adapt", "validation": "val"}
 LEGACY_METRICS = {"top1": "accuracy1", "top5": "accuracy5", "entropy": "entropy", "ece": "ece"}
@@ -42,10 +42,12 @@ def _load_stage(directory):
     configuration = json.loads((directory / "config.json").read_text())
     args = configuration["arguments"]
     stage = args["stage"]
+    if stage not in {"baseline", "ablation", "imbalance"}:
+        raise ValueError(f"Unsupported report stage {stage!r} in {directory}")
     with (directory / "per_corruption.csv").open(newline="") as handle:
         rows = list(csv.DictReader(handle))
     scenarios = [] if stage == "imbalance" else ["natural"]
-    if stage in {"imbalance", "oracle"}:
+    if stage == "imbalance":
         scenarios.extend(f"ratio_{ratio:03d}" for ratio in args["ratios"])
     expected = {
         (seed, corruption, stream, method)
@@ -213,7 +215,6 @@ def _plot_imbalance(summary, output):
                     [row[f"{phase}_top1_mean"] for _, row in series],
                     yerr=[row[f"{phase}_top1_std"] or 0 for _, row in series],
                     label=method, color=color, marker="o", capsize=3,
-                    linestyle="--" if method == "cap_oracle_labels" else "-",
                 )
         axis.set_title(title)
         axis.set_xlabel("Target dominant class share in adaptation (%)")
@@ -252,7 +253,7 @@ def _compare_legacy(rows, directory):
         if row["stage"] != "baseline":
             continue
         corruption, seed = row["corruption"], row["seed"]
-        dataset = "imagenet" if row.get("dataset") == "imagenet-c" else "cifar10"
+        dataset = {"imagenet-c": "imagenet", "cifar100-c": "cifar100"}.get(row.get("dataset"), "cifar10")
         file = directory / f"neo-{dataset}-base-{seed}-{corruption}.json"
         if not file.is_file():
             continue
@@ -305,7 +306,7 @@ def generate_report(run_directories, output, reference_dir=None):
     overall = _aggregate(rows, ("stage", "stream", "method"))
     per_corruption = _aggregate(rows, ("stage", "stream", "corruption", "method"))
     natural_stage = "ablation" if "ablation" in configs else "baseline"
-    methods = [row for row in overall if row["stream"] == "natural" and row["stage"] in {natural_stage, "oracle"}]
+    methods = [row for row in overall if row["stream"] == "natural" and row["stage"] == natural_stage]
     diagnostics = _paired_diagnostics(rows)
     _write_csv(output, "overall_summary.csv", overall)
     _write_csv(output, "per_corruption_accuracy.csv", per_corruption)
