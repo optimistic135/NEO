@@ -1,5 +1,7 @@
 """Single-view PLEAD and windowed NEO over cached frozen model outputs."""
 
+from dataclasses import dataclass
+
 import torch
 from torch.nn import functional as F
 
@@ -78,18 +80,21 @@ class FeatureLogitWindow:
         self.projected = self.logits
 
     @torch.no_grad()
-    def append(self, features):
+    def append(self, features, *, allow_oversize=False):
         if (features.ndim != 2 or features.shape[1] != self.weight.shape[1]
-                or not 0 < len(features) <= self.capacity or features.device != self.weight.device):
+                or not len(features) or (len(features) > self.capacity and not allow_oversize)
+                or features.device != self.weight.device):
             raise ValueError("Invalid feature shape, device or batch larger than FIFO capacity")
         features = features.detach().float()
         logits = F.linear(features, self.weight, self.bias)
-        projected = features @ self.centered.T
-        tail = self.capacity - len(features)
+        retained = features[-self.capacity:]
+        projected = retained @ self.centered.T
+        tail = self.capacity - len(retained)
         start = max(0, len(self.features) - tail)
-        self.features = torch.cat((self.features[start:], features))
-        self.logits = torch.cat((self.logits[start:], logits))
+        self.features = torch.cat((self.features[start:], retained))
+        self.logits = torch.cat((self.logits[start:], logits[-self.capacity:]))
         self.projected = torch.cat((self.projected[start:], projected))
+        return logits
 
     def newest_logits(self, count):
         if not 0 < count <= len(self.logits):
@@ -104,20 +109,34 @@ class NEOOnline:
         return window.newest_logits(count) - F.linear(window.features.mean(dim=0), window.weight)
 
 
+@dataclass(frozen=True)
+class PLEADComponents:
+    debias: bool = True
+    weight: bool = True
+    gate: bool = True
+    shrink: bool = True
+    hard_prior: bool = False
+
+
 class PLEADLite:
-    def __init__(self, window, config=V2Config()):
+    def __init__(self, window, config=V2Config(), components=PLEADComponents()):
         self.q = window.weight.new_zeros(window.weight.shape[0])
         self.cfg = config
+        self.components = components
 
     @torch.no_grad()
-    def update(self, window, count):
-        raw = window.newest_logits(count)
+    def update(self, window, count, *, batch_logits=None, audit=False):
+        raw = window.newest_logits(count) if batch_logits is None else batch_logits
         u = window.projected
         n = len(u)
         probabilities = (window.logits - self.q).softmax(dim=1)
         top = probabilities.topk(2, dim=1).values
         margin = top[:, 0] - top[:, 1]
         reliability = (margin / (margin + self.cfg.margin_offset)).clamp(0, 1)
+        if not self.components.weight:
+            reliability = torch.ones_like(reliability)
+        if self.components.hard_prior:
+            probabilities = F.one_hot(probabilities.argmax(dim=1), probabilities.shape[1]).to(probabilities)
         t = (probabilities @ window.centered) @ window.centered.T
         parity = torch.arange(n, device=u.device) % 2
         weights = torch.stack((reliability, reliability * (parity == 0), reliability * (parity == 1)))
@@ -135,6 +154,10 @@ class PLEADLite:
         gamma = torch.where(
             halves_ok & gate_ok, (1 - uncertainty / (signal + self.cfg.eps)).clamp(0, 1), 0,
         )
+        if not self.components.gate:
+            gamma = full_ok.to(gamma)
+        if not self.components.debias:
+            gamma = torch.zeros_like(gamma)
         applied = gamma * kappa
         residual = torch.where(applied > 0, u - applied * t, u)
         q_raw = residual.mean(dim=0)
@@ -144,6 +167,8 @@ class PLEADLite:
         shrinkage = torch.where(
             shrink_ok & (n > 1), (1 - variance / (energy + self.cfg.eps)).clamp(0, 1), 0,
         )
+        if not self.components.shrink:
+            shrinkage = torch.ones_like(shrinkage)
         candidate = shrinkage * q_raw
         usable = torch.isfinite(candidate).all() & torch.isfinite(raw - candidate).all()
         previous_usable = torch.isfinite(raw - self.q).all()
@@ -158,7 +183,16 @@ class PLEADLite:
         diagnostics = torch.stack((
             zero + n, kappa, shrinkage, gamma, torch.where(codes[0] != 1, neff[0], missing),
             torch.where(stats_valid, sxx[0], missing), torch.where(correlation_valid, corr[0], missing),
-            codes[0], torch.where(full_ok, codes[1], zero), torch.where(first_half_ok, codes[2], zero),
-            (halves_ok & ~gate_ok).float(), shrink_code, correction_code,
+            codes[0], torch.where(full_ok & self.components.gate, codes[1], zero),
+            torch.where(first_half_ok & self.components.gate, codes[2], zero),
+            (halves_ok & ~gate_ok & self.components.gate).float(),
+            shrink_code if self.components.shrink else zero, correction_code,
         ))
+        if audit:
+            audit_values = torch.cat((
+                self.q.norm().reshape(1),
+                torch.where(applied > 0, (gamma * b_hat).norm(), zero).reshape(1),
+                probabilities.mean(dim=0),
+            ))
+            return raw - self.q, diagnostics, audit_values
         return raw - self.q, diagnostics
