@@ -1,0 +1,5 @@
+root: /data/user3/chenc/checkpoints/resnet50
+checkpoints:
+  cifar10-c: cifar10_resnet50.pth
+  cifar100-c: cifar100_resnet50.pth
+  imagenet-c: resnet50_imagenet1k_v2.pth

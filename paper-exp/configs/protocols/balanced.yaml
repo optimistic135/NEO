@@ -1,0 +1,7 @@
+workers: 0
+warmup: 5
+efficiency_batches: 30
+efficiency_corruption: gaussian_noise
+methods: [no_adapt, bn_adapt, tent, sar, t3a, neo, pea, roid, plead]
+ablations: [hard_prior, norm_only_kappa, no_evidence_gate, no_composition, plead]
+efficiency: [no_adapt, tent, sar, t3a, neo, pea, roid, plead]

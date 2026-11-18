@@ -1,0 +1,7 @@
+methods: [no_adapt, bn_adapt, tent, sar, t3a, neo, roid, plead]
+paper: https://openreview.net/pdf?id=c7AAHdEYz5
+status: Exact DART manifest or author implementation required. SAR reference verified independently.
+datasets:
+  cifar10-c: {subset: 1000, ratios: [1, 5, 20, 50, 5000]}
+  cifar100-c: {subset: 100, ratios: [1, 200, 500, 50000]}
+  imagenet-c: {subset: 100, ratios: [1, 1000, 5000, 500000]}

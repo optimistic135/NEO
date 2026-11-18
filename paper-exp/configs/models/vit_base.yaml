@@ -1,0 +1,3 @@
+cifar10-c: {repo: nateraw/vit-base-patch16-224-cifar10, revision: b55eeb4221d3a568f627078ed6f27b967810be3d, weights: pytorch_model.bin}
+cifar100-c: {repo: avanishd/vit-base-patch16-224-in21k-finetuned-cifar100, revision: 1dc8766c25b7cd31b4bb90f1d2c9ae93f24a3e60, weights: model.safetensors}
+imagenet-c: {repo: timm/vit_base_patch16_224.augreg2_in21k_ft_in1k, revision: 063c6c38a5d8510b2e57df480445e94b231dad2c, weights: model.safetensors}

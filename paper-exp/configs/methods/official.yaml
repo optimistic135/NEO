@@ -1,0 +1,11 @@
+upstream:
+  tent: {url: 'https://github.com/DequanWang/tent', commit: e9e926a668d85244c66a6d5c006efbd2b82e83e8}
+  sar: {url: 'https://github.com/mr-eggplant/SAR', commit: 20f6e24b17525f34503510afccedc0629b67b7c4}
+  t3a: {url: 'https://github.com/matsuolab/T3A', commit: ff8cde5f06f61035c957720c6275c33893e0f564}
+  pea: {url: 'https://github.com/TheMaXiao/PEA_TTA', commit: 9c358ba682052862df0739fbbadb71f1b586614d}
+  roid: {url: 'https://github.com/mariodoebler/test-time-adaptation', commit: 8b2ed63255d906b6b0afaefc6ae630b9ec4bdaa1}
+  neo: {url: 'https://github.com/optimistic135/NEO', commit: f8480ae}
+tent: {cifar_lr: 0.001, imagenet_lr: 0.0005, momentum: 0.9}
+sar: {resnet_lr: 0.00025, vit_lr_per_64: 0.001, momentum: 0.9, rho: 0.05, entropy_margin_factor: 0.4, reset_entropy: 0.2, recovery_momentum: 0.9}
+t3a: {filter_k: 20}
+roid: {cifar_lr: 0.001, imagenet_lr: 0.00025, momentum: 0.9, source_momentum: 0.99, prior_momentum: 0.9, temperature: 0.3333333333333333, eps: 0.00001, clip: 0.99}
