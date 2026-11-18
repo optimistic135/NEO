@@ -1,0 +1,12 @@
+torch
+torchvision
+timm
+transformers<5
+huggingface-hub
+safetensors
+numpy
+scipy
+PyYAML
+Pillow
+tqdm
+matplotlib
