@@ -9,3 +9,9 @@ tent: {cifar_lr: 0.001, imagenet_lr: 0.0005, momentum: 0.9}
 sar: {resnet_lr: 0.00025, vit_lr_per_64: 0.001, momentum: 0.9, rho: 0.05, entropy_margin_factor: 0.4, reset_entropy: 0.2, recovery_momentum: 0.9}
 t3a: {filter_k: 20}
 roid: {cifar_lr: 0.001, imagenet_lr: 0.00025, momentum: 0.9, source_momentum: 0.99, prior_momentum: 0.9, temperature: 0.3333333333333333, eps: 0.00001, clip: 0.99}
+pea:
+  source_samples: 10000
+  smoke_source_samples: 64
+  source_batch: 64
+  alpha: 0.2
+  augment_microbatch: 3

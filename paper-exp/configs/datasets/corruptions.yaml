@@ -2,6 +2,6 @@ corruptions: [gaussian_noise, shot_noise, impulse_noise, defocus_blur, glass_blu
 severity: 5
 seeds: [137, 2029, 8671]
 datasets:
-  cifar10-c: {root: /data/user3/chenc/datasets/CIFAR-10-C, classes: 10, per_class: 1000, batch: 200}
+  cifar10-c: {root: /data/user3/chenc/datasets/CIFAR-10-C, classes: 10, per_class: 1000, batch: 200, pea_source: /home/user3/chenc/workspace/git-rep/NEO/paper-exp/.upstream/cifar-source}
   cifar100-c: {root: /data/user3/chenc/datasets/CIFAR-100-C, classes: 100, per_class: 100, batch: 200, pea_source: /home/user3/chenc/workspace/git-rep/DF-ACTTA/datasets}
   imagenet-c: {root: /data/user3/chenc/datasets/ImageNet-C, classes: 1000, per_class: 50, batch: 64}

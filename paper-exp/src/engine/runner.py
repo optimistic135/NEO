@@ -39,7 +39,7 @@ def seed_everything(seed):
     torch.manual_seed(seed)
 
 
-def adapter_for(method, model, dataset, spec, transform, seed, upstream, cfg):
+def adapter_for(method, model, dataset, spec, transform, seed, upstream, cfg, smoke):
     if method in VARIANTS:
         return PLEAD(model, VARIANTS[method])
     if method in ("no_adapt", "bn_adapt", "neo"):
@@ -52,7 +52,7 @@ def adapter_for(method, model, dataset, spec, transform, seed, upstream, cfg):
     if method == "t3a":
         return T3A(model, cfg[method]["filter_k"])
     if method == "pea":
-        return PEA(model, dataset, spec, transform, seed, upstream)
+        return PEA(model, dataset, spec, transform, seed, upstream, cfg[method], smoke)
     if method == "roid":
         upstream_aug = load_upstream(upstream, "roid", "classification/augmentations/transforms_cotta.py")
         transform_aug = upstream_aug.get_tta_transforms(224, padding_mode="reflect", cotta_augs=False)
@@ -196,7 +196,7 @@ def run(args):
                             try:
                                 if method in unsupported:
                                     raise FileNotFoundError(unsupported[method])
-                                adapter = adapter_for(method, model, dataset, spec, transform, seed, args.upstream, methods)
+                                adapter = adapter_for(method, model, dataset, spec, transform, seed, args.upstream, methods, args.smoke)
                                 warmup = balanced_cfg["warmup"] if args.stage == "efficiency" else 0
                                 result = score(adapter, loader, spec["classes"], device, warmup)
                                 save(row_path, dict(**row, status="ok", **result))

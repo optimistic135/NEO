@@ -44,7 +44,7 @@ class PEA(Adapter):
     timing = "two-pass-current-batch"
     offline = {}
 
-    def __init__(self, model, dataset, spec, transform, seed, upstream):
+    def __init__(self, model, dataset, spec, transform, seed, upstream, cfg, smoke):
         super().__init__(model)
         if not spec.get("pea_source"):
             raise FileNotFoundError(f"PEA requires clean source statistics or an existing source dataset for {dataset}")
@@ -58,7 +58,7 @@ class PEA(Adapter):
         kind = "resnet" if resnet else "vit"
         self.upstream = load_upstream(upstream, "pea", f"pea_{kind}.py")
         self.device = model.head.weight.device
-        self.resnet = resnet
+        self.microbatch = cfg["augment_microbatch"]
         native = self.model.network
         self.network = HFViTView(native).eval() if self.model.head_name == "classifier" else native
         network = self.network
@@ -68,17 +68,17 @@ class PEA(Adapter):
                 torch.testing.assert_close(network(example), native(example).logits)
         suffix = "ResNet" if resnet else "ViT"
         self.stats = getattr(self.upstream, f"PEAStats{suffix}")(
-            momentum=.05 if dataset == "cifar10-c" else .02, alpha=.2,
+            momentum=.05 if dataset == "cifar10-c" else .02, alpha=cfg["alpha"],
             gamma=2.5 if resnet or dataset == "cifar10-c" else 4.,
             entropy_threshold=({"cifar10-c": .2, "cifar100-c": .5, "imagenet-c": 1.}[dataset]
                                if resnet else .5 if dataset == "cifar10-c" else 1.),
         )
-        n = min(10000, len(train))
+        n = min(cfg["smoke_source_samples" if smoke else "source_samples"], len(train))
         first, _ = random_split(train, [n, len(train)-n], generator=torch.Generator().manual_seed(seed))
         def source_images(items):
             return torch.stack([image for image, _ in items]), None
-        loader = DataLoader(first, batch_size=64, shuffle=True, num_workers=0, collate_fn=source_images)
-        key = (dataset, model.architecture, str(self.device), seed, root)
+        loader = DataLoader(first, batch_size=cfg["source_batch"], shuffle=True, num_workers=0, collate_fn=source_images)
+        key = (dataset, model.architecture, str(self.device), seed, root, n)
         if key not in self.offline:
             args = {"max_samples": n} if resnet else {"use_cls_only": False}
             self.offline[key] = tuple({k: v.cpu() for k,v in result.items()} for result in
@@ -103,7 +103,7 @@ class PEA(Adapter):
         hooks = [module.register_forward_pre_hook(count_pass) for module in (self.network, self.aligner)]
         try:
             logits, _ = self.infer(self.network, self.aligner, images.cpu(), self.device,
-                                   microbatch_variants=3, **self.options)
+                                   microbatch_variants=self.microbatch, **self.options)
         finally:
             for hook in hooks:
                 hook.remove()

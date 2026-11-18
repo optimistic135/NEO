@@ -143,6 +143,28 @@ def report(output):
                         line.append("N/A" if a == "vit_base" else "Pending Reproduction")
                     cells.append(line)
         text += [table(("Dataset","Backbone","IR",*(NAMES[m] for m in methods),*(["DART"] if stage=="online_ir" else [])),cells), ""]
+    def measured(row, key):
+        if row is None or key not in row:
+            return "待运行"
+        value = f"{row[key]:.3f}"
+        return value + (f" ± {row[key+'_std']:.3f}" if row.get("complete") and key+"_std" in row else "")
+
+    architecture_rows = []
+    for dataset in params["datasets"]:
+        for stage, ir in [("balanced", None), *(("online_ir", i) for i in on["datasets"][dataset]["ratios"])]:
+            v = result_lookup.get((stage,dataset,"vit_base",ir,"plead"))
+            r = result_lookup.get((stage,dataset,"resnet50",ir,"plead"))
+            delta = f"{v['top1']-r['top1']:+.3f}" if v and r and v["complete"] and r["complete"] else "—"
+            architecture_rows.append((dataset,stage,ir or "—",measured(v,"top1"),measured(r,"top1"),delta))
+    text += ["## PLEAD 跨架构", "", table(("数据集","协议","IR","ViT Top-1","ResNet Top-1","ViT − ResNet (pp)"),
+             architecture_rows), "", "两架构使用各自的预训练权重和预处理。", ""]
+    measured_eff = [r for r in summary if r["stage"] == "efficiency"]
+    eff_keys = ("end_to_end_seconds","adaptation_overhead_seconds","throughput","peak_gpu_mib",
+                "forward_passes","backward_passes","trainable_parameters")
+    if measured_eff:
+        text += [table(("Dataset","Backbone","Method","端到端秒","适应开销秒","图像/秒","GPU MiB","前向","反向","可训练参数"),
+                       [(r["dataset"],r["architecture"],NAMES[r["method"]],*(measured(r,k) for k in eff_keys))
+                        for r in measured_eff]), ""]
     text += ["## 配对增益、机制与计时", "",
              "各阶段 summary.csv 记录百分点及配对区间，以及 κ、γ、拟合有效率、Fallback、Macro Accuracy 和 ECE。"
              "Efficiency 表使用图像每秒。逐流同时记录同步端到端时间、专属时间、GPU 显存与前后向次数。"
@@ -165,6 +187,14 @@ def report(output):
     pending = output/"report.tmp"
     pending.write_text("\n".join(text)+"\n")
     pending.replace(output/"report.md")
+    smoke_plead = [r for r in smoke if r["status"] == "ok" and r["method"] == "plead"]
+    if smoke_plead:
+        fig = Figure(figsize=(8,4), layout="constrained")
+        ax = fig.subplots()
+        ax.bar([r["dataset"]+"\n"+r["architecture"] for r in smoke_plead], [r["top1"] for r in smoke_plead])
+        ax.set_title("Gaussian noise smoke test (seed 137, first two batches)")
+        ax.set_ylabel("Top-1 (%)")
+        fig.savefig(output/"smoke"/"plead_smoke.pdf")
     complete = [r for r in summary if r["stage"]=="balanced" and r["method"]=="plead" and r["complete"]]
     if complete:
         fig = Figure(figsize=(8,4),layout="constrained")
