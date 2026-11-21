@@ -49,16 +49,22 @@ def main():
                     raise ValueError(f"Unpaired data or checkpoint: {data}/{corruption}/{seed}")
             scores = [cell([lookup[data, corruption, s, m]["validation"]["top1"] for s in SEEDS
                             if (data, corruption, s, m) in lookup]) for m in METHODS]
+            if data == "imagenet-c":
+                scores[0] = "未安排"
             lines.append(f"| {corruption} | {scores[0]} | {scores[1]} |")
         totals = []
         for m in METHODS:
             seeds = [statistics.mean(lookup[data, c, s, m]["validation"]["top1"] for c in CORRUPTIONS)
                      for s in SEEDS if all((data, c, s, m) in lookup for c in CORRUPTIONS)]
             totals.append(cell(seeds))
+        if data == "imagenet-c":
+            totals[0] = "未安排"
         lines += [f"| **平均准确率** | **{totals[0]}** | **{totals[1]}** |", "",
                   "| 方法 | 阶段 | 成功流 | 时延 (ms/batch) | 峰值 RAM (MiB) | 峰值 VRAM (MiB) |",
                   "| --- | --- | ---: | ---: | ---: | ---: |"]
         for m in METHODS:
+            if data == "imagenet-c" and m == "pea":
+                continue
             subset = [r for k, r in lookup.items() if k[0] == data and k[-1] == m]
             for stage in ("adaptation", "validation"):
                 values = [r[stage] for r in subset]

@@ -18,15 +18,14 @@ case "$dataset" in
   *) echo "Unknown dataset: $dataset" >&2; exit 2 ;;
 esac
 for method in "${methods[@]}"; do
-  if python -u run.py --dataset "$dataset" --method "$method" --upstream "$upstream" --output "$out" --smoke "$@" > "$out/logs/$dataset-$method-smoke.log" 2>&1; then
+  if python -u run.py --dataset "$dataset" --method "$method" --upstream "$upstream" --output "$out" --smoke "$@" 2>&1 | tee "$out/logs/$dataset-$method-smoke.log"; then
     ready+=("$method")
   else
-    cat "$out/logs/$dataset-$method-smoke.log" >&2
     fail=1
   fi
 done
 for method in "${ready[@]}"; do
-  python -u run.py --dataset "$dataset" --method "$method" --upstream "$upstream" --output "$out" "$@" > "$out/logs/$dataset-$method.log" 2>&1 || fail=1
+  python -u run.py --dataset "$dataset" --method "$method" --upstream "$upstream" --output "$out" "$@" 2>&1 | tee "$out/logs/$dataset-$method.log" || fail=1
   (flock -x 8; python report.py --output "$out") 8>"$out/logs/report.lock"
 done
 exit "$fail"

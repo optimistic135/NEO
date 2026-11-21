@@ -1,16 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-server_root="${BALANCED_512_STORAGE:-/data/user3/chenc/balanced-512}"
+repo_root="$(cd .. && pwd)"
+server_root="${BALANCED_512_STORAGE:-$PWD/.runtime/server}"
 checkpoint_root="${VIT_CHECKPOINT_ROOT:-/data/user3/chenc/checkpoints/Vit}"
 data_root="${CLEAN_CIFAR_ROOT:-/data/user3/chenc/datasets}"
 python_base="${PYTHON_BOOTSTRAP:-python3.10}"
-mkdir -p "$server_root"/{tmp,cache,upstream} "$checkpoint_root" || {
-  echo "Need write access to $server_root and $checkpoint_root" >&2
-  exit 1
+
+ensure_asset_dir() {
+  local path="$1"
+  if [[ ! -d "$path" ]] && ! mkdir -p "$path" 2>/dev/null; then
+    if [[ "${BALANCED_512_CREATE_ASSET_DIRS:-0}" == 1 ]]; then
+      sudo install -d -o "$(id -u)" -g "$(id -g)" -- "$path" || return 1
+    fi
+  fi
+  if [[ ! -d "$path" || ! -w "$path" ]]; then
+    echo "Need write access to $path. Ask the server administrator to provision this directory." >&2
+    return 1
+  fi
 }
+
+mkdir -p "$server_root"/{tmp,cache,upstream}
 exec 9>"$server_root/server.lock"
 flock -n 9 || { echo "balanced-512 is already running in $server_root" >&2; exit 1; }
+ensure_asset_dir "$checkpoint_root"
 export TMPDIR="$server_root/tmp"
 export XDG_CACHE_HOME="$server_root/cache"
 export PIP_CACHE_DIR="$XDG_CACHE_HOME/pip"
@@ -20,15 +33,17 @@ export HUGGINGFACE_HUB_CACHE="$HF_HUB_CACHE"
 export HF_XET_CACHE="$XDG_CACHE_HOME/hf-xet"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-export PEA_UPSTREAM="$server_root/upstream"
-export BALANCED_512_OUTPUT="${BALANCED_512_OUTPUT:-$server_root/results}"
+export PEA_UPSTREAM="${PEA_UPSTREAM:-$server_root/upstream}"
+export BALANCED_512_OUTPUT="${BALANCED_512_OUTPUT:-$repo_root/results/balanced-512}"
 
 find_clean_root() {
-  local name="$1" train_file="$2" parent
+  local dataset_class="$1" name="$2" train_file="$3" parent root
   local matches=()
   while IFS= read -r -d '' parent; do
-    if [[ -s "$parent/$train_file" ]]; then
-      matches+=("$(dirname "$parent")")
+    root="$(dirname "$parent")"
+    if [[ -s "$parent/$train_file" ]] &&
+       python -u -c 'import sys; from torchvision import datasets; getattr(datasets, sys.argv[1])(sys.argv[2], train=True, download=False)' "$dataset_class" "$root" >&2; then
+      matches+=("$root")
     fi
   done < <(find -L "$data_root" -maxdepth 4 -type d -name "$name" -print0)
   if [[ ${#matches[@]} -gt 1 ]]; then
@@ -41,18 +56,17 @@ find_clean_root() {
 }
 
 prepare_clean_root() {
-  local dataset_class="$1" name="$2" train_file="$3" root
-  root="$(find_clean_root "$name" "$train_file")" || return 1
-  if [[ -z "$root" ]]; then
-    if [[ ! -w "$data_root" ]]; then
-      echo "Need write access to $data_root to download clean $dataset_class" >&2
-      return 1
-    fi
-    root="$data_root"
+  local dataset_class="$1" name="$2" train_file="$3" root download_root
+  root="$(find_clean_root "$dataset_class" "$name" "$train_file")" || return 1
+  if [[ -n "$root" ]]; then
+    printf '%s\n' "$root"
+    return 0
   fi
-  # Torchvision verifies the official files and only downloads if they are missing or invalid.
-  python -u -c 'import sys; from torchvision import datasets; getattr(datasets, sys.argv[1])(sys.argv[2], train=True, download=True)'     "$dataset_class" "$root" >&2 || return 1
-  printf '%s\n' "$root"
+  download_root="$data_root/CIFAR-clean"
+  ensure_asset_dir "$download_root" || return 1
+  python -u -c 'import sys; from torchvision import datasets; getattr(datasets, sys.argv[1])(sys.argv[2], train=True, download=True)' \
+    "$dataset_class" "$download_root" >&2 || return 1
+  printf '%s\n' "$download_root"
 }
 
 "$python_base" -c 'import sys; assert sys.version_info[:2] == (3, 10), "Python 3.10 required"'
@@ -68,6 +82,12 @@ cifar100_source="$(prepare_clean_root CIFAR100 cifar-100-python train)"
 bash setup.sh
 
 pea_pin=9c358ba682052862df0739fbbadb71f1b586614d
+existing_pea="$repo_root/paper-exp/.upstream"
+if [[ "$PEA_UPSTREAM" == "$server_root/upstream" && -d "$existing_pea/pea/.git" ]] &&
+   [[ "$(git -C "$existing_pea/pea" rev-parse HEAD)" == "$pea_pin" ]]; then
+  export PEA_UPSTREAM="$existing_pea"
+fi
+mkdir -p "$PEA_UPSTREAM"
 if [[ ! -d "$PEA_UPSTREAM/pea/.git" ]]; then
   git -C "$PEA_UPSTREAM" clone https://github.com/TheMaXiao/PEA_TTA.git pea
 fi

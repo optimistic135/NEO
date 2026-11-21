@@ -31,9 +31,11 @@ python balanced-512/report.py
 ## 服务器一键安装和运行
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 PYTHON_BOOTSTRAP="$HOME/miniforge3/envs/df-atta/bin/python" bash balanced-512/run_server.sh
+CUDA_VISIBLE_DEVICES=0 PYTHON_BOOTSTRAP="$HOME/miniforge3/envs/df-atta/bin/python" BALANCED_512_CREATE_ASSET_DIRS=1 bash balanced-512/run_server.sh
 ```
 
-脚本在 `/data/user3/chenc/balanced-512/` 创建独立 Python 3.10 环境、临时目录、缓存和结果目录。ViT-B 固定版本保存在 `/data/user3/chenc/checkpoints/Vit/hub/`。旧 Conda 环境的 Python 仅用来建立 venv，不继承旧环境的第三方包。默认使用一个 GPU，三组数据串行运行，DataLoader 保持单进程。运行账户需要对两个输出目录有写权限。
+脚本在 `balanced-512/.runtime/server/` 建立独立 Python 3.10 环境，安装 PyTorch 2.1.2（CUDA 11.8）、Torchvision 0.16.2 及其他依赖。旧 Conda 环境只提供 Python 解释器。ViT-B 固定版本缓存在 `/data/user3/chenc/checkpoints/Vit/hub/`。
 
-脚本在 `/data/user3/chenc/datasets/` 下查找解压后的 `cifar-10-batches-py/` 和 `cifar-100-python/`，缺失时用 Torchvision 下载官方干净数据。执行用户需要对缺失数据的存放目录、模型缓存目录及实验输出目录有写权限。还可通过 `CLEAN_CIFAR_ROOT`、`BALANCED_512_STORAGE`、`VIT_CHECKPOINT_ROOT` 指定替代路径。运行日志在 `results/logs/`，报告在 `results/report.md`，均相对于所选存储目录。
+先在 `/data/user3/chenc/datasets/` 查找并核验干净 CIFAR-10 和 CIFAR-100。缺失或损坏时，将官方数据下载到其 `CIFAR-clean/` 子目录。若父目录不可写且两个指定子目录尚不存在，`BALANCED_512_CREATE_ASSET_DIRS=1` 允许脚本通过 sudo 创建所需子目录。管理员也可以提前提供可写目录，此时省略该选项。脚本使用一个 GPU 串行执行，先跑 Smoke Test，再跑对应正式实验。
+
+默认结果位于仓库根目录下的 `results/balanced-512/`。报告是 `report.md`，逐流 CSV 是 `per_stream.csv`，实时日志位于 `logs/`。用 `BALANCED_512_OUTPUT` 可覆盖输出位置。
