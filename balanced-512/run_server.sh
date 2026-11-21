@@ -31,23 +31,40 @@ find_clean_root() {
       matches+=("$(dirname "$parent")")
     fi
   done < <(find -L "$data_root" -maxdepth 4 -type d -name "$name" -print0)
-  if [[ ${#matches[@]} -ne 1 ]]; then
-    echo "Expected one extracted $name containing $train_file under $data_root; found ${#matches[@]}" >&2
+  if [[ ${#matches[@]} -gt 1 ]]; then
+    echo "Multiple copies of $name under $data_root. Set CLEAN_CIFAR_ROOT to the intended location." >&2
     return 1
   fi
-  printf '%s\n' "${matches[0]}"
+  if [[ ${#matches[@]} -eq 1 ]]; then
+    printf '%s\n' "${matches[0]}"
+  fi
 }
 
-cifar10_source="$(find_clean_root cifar-10-batches-py data_batch_1)"
-cifar100_source="$(find_clean_root cifar-100-python train)"
+prepare_clean_root() {
+  local dataset_class="$1" name="$2" train_file="$3" root
+  root="$(find_clean_root "$name" "$train_file")" || return 1
+  if [[ -z "$root" ]]; then
+    if [[ ! -w "$data_root" ]]; then
+      echo "Need write access to $data_root to download clean $dataset_class" >&2
+      return 1
+    fi
+    root="$data_root"
+  fi
+  # Torchvision verifies the official files and only downloads if they are missing or invalid.
+  python -u -c 'import sys; from torchvision import datasets; getattr(datasets, sys.argv[1])(sys.argv[2], train=True, download=True)'     "$dataset_class" "$root" >&2 || return 1
+  printf '%s\n' "$root"
+}
+
 "$python_base" -c 'import sys; assert sys.version_info[:2] == (3, 10), "Python 3.10 required"'
 if [[ ! -x "$server_root/env/bin/python" ]]; then
   "$python_base" -m venv "$server_root/env"
 fi
 export PATH="$server_root/env/bin:$PATH"
-python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu118 torch==2.1.2+cu118 torchvision==0.16.2+cu118
-python -m pip install --no-cache-dir -r requirements-server.txt
+python -m pip install --index-url https://download.pytorch.org/whl/cu118 torch==2.1.2+cu118 torchvision==0.16.2+cu118
+python -m pip install -r requirements-server.txt
 python -c 'import torch, torchvision; assert torch.cuda.is_available(), "CUDA unavailable"; print(torch.__version__, torchvision.__version__, torch.cuda.get_device_name())'
+cifar10_source="$(prepare_clean_root CIFAR10 cifar-10-batches-py data_batch_1)"
+cifar100_source="$(prepare_clean_root CIFAR100 cifar-100-python train)"
 bash setup.sh
 
 pea_pin=9c358ba682052862df0739fbbadb71f1b586614d

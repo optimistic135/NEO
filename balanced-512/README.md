@@ -36,4 +36,4 @@ CUDA_VISIBLE_DEVICES=0 PYTHON_BOOTSTRAP="$HOME/miniforge3/envs/df-atta/bin/pytho
 
 脚本在 `/data/user3/chenc/balanced-512/` 创建独立 Python 3.10 环境、临时目录、缓存和结果目录。ViT-B 固定版本保存在 `/data/user3/chenc/checkpoints/Vit/hub/`。旧 Conda 环境的 Python 仅用来建立 venv，不继承旧环境的第三方包。默认使用一个 GPU，三组数据串行运行，DataLoader 保持单进程。运行账户需要对两个输出目录有写权限。
 
-脚本在 `/data/user3/chenc/datasets/` 下查找解压后的 `cifar-10-batches-py/` 和 `cifar-100-python/`。还可通过 `CLEAN_CIFAR_ROOT`、`BALANCED_512_STORAGE`、`VIT_CHECKPOINT_ROOT` 指定替代路径。运行日志在 `results/logs/`，报告在 `results/report.md`，均相对于所选存储目录。
+脚本在 `/data/user3/chenc/datasets/` 下查找解压后的 `cifar-10-batches-py/` 和 `cifar-100-python/`，缺失时用 Torchvision 下载官方干净数据。执行用户需要对缺失数据的存放目录、模型缓存目录及实验输出目录有写权限。还可通过 `CLEAN_CIFAR_ROOT`、`BALANCED_512_STORAGE`、`VIT_CHECKPOINT_ROOT` 指定替代路径。运行日志在 `results/logs/`，报告在 `results/report.md`，均相对于所选存储目录。
