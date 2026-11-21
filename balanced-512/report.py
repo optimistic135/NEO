@@ -71,7 +71,7 @@ def main():
                     display = ["—"] * 3
                 lines.append(f"| {m.upper()} | {stage} | {len(subset)}/45 | " + " | ".join(display) + " |")
         lines.append("")
-    lines += ["## 运行状态", ""]
+    lines += ["## 运行状态", "", "- 本次服务器批量运行仅在 CIFAR-10-C 和 CIFAR-100-C 评估 PEA。"]
     for f in sorted((root / "status").glob("*/*.json")):
         state = json.loads(f.read_text())
         lines.append(f"- {f.parent.name}/{f.stem} — {state['status']} {state.get('error', '')}")

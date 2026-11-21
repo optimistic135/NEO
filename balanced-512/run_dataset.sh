@@ -12,16 +12,17 @@ exec 9>"$out/logs/$dataset.lock"
 flock -n 9 || { echo "$dataset is already running" >&2; exit 1; }
 ready=()
 fail=0
-for method in plead pea; do
+case "$dataset" in
+  cifar10-c|cifar100-c) methods=(plead pea) ;;
+  imagenet-c) methods=(plead) ;;
+  *) echo "Unknown dataset: $dataset" >&2; exit 2 ;;
+esac
+for method in "${methods[@]}"; do
   if python -u run.py --dataset "$dataset" --method "$method" --upstream "$upstream" --output "$out" --smoke "$@" > "$out/logs/$dataset-$method-smoke.log" 2>&1; then
     ready+=("$method")
   else
     cat "$out/logs/$dataset-$method-smoke.log" >&2
-    if [[ "$method" == pea && "$dataset" == imagenet-c && $# -eq 0 ]]; then
-      python -u run.py --dataset "$dataset" --method "$method" --upstream "$upstream" --output "$out" > "$out/logs/$dataset-$method.log" 2>&1 || fail=1
-    else
-      fail=1
-    fi
+    fail=1
   fi
 done
 for method in "${ready[@]}"; do
