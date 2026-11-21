@@ -2,10 +2,15 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 repo_root="$(cd .. && pwd)"
-server_root="${BALANCED_512_STORAGE:-$PWD/.runtime/server}"
+server_root="${BALANCED_512_STORAGE:-$PWD/.runtime/server-$(id -u)}"
 checkpoint_root="${VIT_CHECKPOINT_ROOT:-/data/user3/chenc/checkpoints/Vit}"
 data_root="${CLEAN_CIFAR_ROOT:-/data/user3/chenc/datasets}"
 python_base="${PYTHON_BOOTSTRAP:-python3.10}"
+
+if (( EUID == 0 )); then
+  echo "Run this script as your login user. Only the dedicated asset directories may require sudo." >&2
+  exit 1
+fi
 
 ensure_asset_dir() {
   local path="$1"
@@ -74,8 +79,13 @@ if [[ ! -x "$server_root/env/bin/python" ]]; then
   "$python_base" -m venv "$server_root/env"
 fi
 export PATH="$server_root/env/bin:$PATH"
-python -m pip install --index-url https://download.pytorch.org/whl/cu118 torch==2.1.2+cu118 torchvision==0.16.2+cu118
-python -m pip install -r requirements-server.txt
+python -m pip install --upgrade 'pip>=24.2'
+# Resolve regular dependencies on PIP_INDEX_URL. Only the two CUDA wheels
+# are fetched from the official PyTorch package server.
+python -m pip install --only-binary=:all: -r requirements-server.txt \
+  'torch @ https://download.pytorch.org/whl/cu118/torch-2.1.2%2Bcu118-cp310-cp310-linux_x86_64.whl' \
+  'torchvision @ https://download.pytorch.org/whl/cu118/torchvision-0.16.2%2Bcu118-cp310-cp310-linux_x86_64.whl'
+python -m pip check
 python -c 'import torch, torchvision; assert torch.cuda.is_available(), "CUDA unavailable"; print(torch.__version__, torchvision.__version__, torch.cuda.get_device_name())'
 cifar10_source="$(prepare_clean_root CIFAR10 cifar-10-batches-py data_batch_1)"
 cifar100_source="$(prepare_clean_root CIFAR100 cifar-100-python train)"
