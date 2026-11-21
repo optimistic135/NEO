@@ -19,6 +19,10 @@ ensure_asset_dir() {
       sudo install -d -o "$(id -u)" -g "$(id -g)" -- "$path" || return 1
     fi
   fi
+  # An earlier sudo run may have created the dedicated asset directory as root.
+  if [[ "${BALANCED_512_CREATE_ASSET_DIRS:-0}" == 1 && -d "$path" && ! -L "$path" && ! -w "$path" ]]; then
+    sudo chown "$(id -u):$(id -g)" -- "$path" || return 1
+  fi
   if [[ ! -d "$path" || ! -w "$path" ]]; then
     echo "Need write access to $path. Ask the server administrator to provision this directory." >&2
     return 1
@@ -32,6 +36,9 @@ ensure_asset_dir "$checkpoint_root"
 export TMPDIR="$server_root/tmp"
 export XDG_CACHE_HOME="$server_root/cache"
 export PIP_CACHE_DIR="$XDG_CACHE_HOME/pip"
+export PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+export PIP_CONFIG_FILE=/dev/null
+unset PIP_EXTRA_INDEX_URL PIP_FIND_LINKS PIP_NO_INDEX
 export HF_HOME="$checkpoint_root"
 export HF_HUB_CACHE="$HF_HOME/hub"
 export HUGGINGFACE_HUB_CACHE="$HF_HUB_CACHE"
@@ -79,14 +86,12 @@ if [[ ! -x "$server_root/env/bin/python" ]]; then
   "$python_base" -m venv "$server_root/env"
 fi
 export PATH="$server_root/env/bin:$PATH"
-python -m pip install --upgrade 'pip>=24.2'
-# Resolve regular dependencies on PIP_INDEX_URL. Only the two CUDA wheels
-# are fetched from the official PyTorch package server.
+python -m pip install --only-binary=:all: 'pip>=24.2'
+# Linux x86-64 PyPI wheels for PyTorch 2.1.2 pull in the CUDA 12.1 runtime.
 python -m pip install --only-binary=:all: -r requirements-server.txt \
-  'torch @ https://download.pytorch.org/whl/cu118/torch-2.1.2%2Bcu118-cp310-cp310-linux_x86_64.whl' \
-  'torchvision @ https://download.pytorch.org/whl/cu118/torchvision-0.16.2%2Bcu118-cp310-cp310-linux_x86_64.whl'
+  'torch==2.1.2' 'torchvision==0.16.2'
 python -m pip check
-python -c 'import torch, torchvision; assert torch.cuda.is_available(), "CUDA unavailable"; print(torch.__version__, torchvision.__version__, torch.cuda.get_device_name())'
+python -c 'import torch, torchvision; assert torch.cuda.is_available(), "CUDA unavailable"; print(torch.__version__, torchvision.__version__, "CUDA", torch.version.cuda, torch.cuda.get_device_name())'
 cifar10_source="$(prepare_clean_root CIFAR10 cifar-10-batches-py data_batch_1)"
 cifar100_source="$(prepare_clean_root CIFAR100 cifar-100-python train)"
 bash setup.sh

@@ -34,8 +34,8 @@ python balanced-512/report.py
 PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple CUDA_VISIBLE_DEVICES=0 PYTHON_BOOTSTRAP="$HOME/miniforge3/envs/df-atta/bin/python" BALANCED_512_CREATE_ASSET_DIRS=1 bash balanced-512/run_server.sh
 ```
 
-以普通用户运行脚本。脚本在 `balanced-512/.runtime/server-<UID>/` 建立独立 Python 3.10 环境并缓存安装包。PyTorch 2.1.2（CUDA 11.8）和 Torchvision 0.16.2 从官方 wheel URL 获取，普通依赖使用 `PIP_INDEX_URL`，例如上述清华镜像。旧 Conda 环境只提供 Python 解释器。ViT-B 固定版本缓存在 `/data/user3/chenc/checkpoints/Vit/hub/`。
+以普通用户运行脚本。脚本在 `balanced-512/.runtime/server-<UID>/` 建立独立 Python 3.10 环境并缓存安装包。全部 Python 依赖从 `PIP_INDEX_URL` 安装，默认为清华 PyPI 镜像。Linux x86-64 的 PyTorch 仍为 2.1.2，Torchvision 仍为 0.16.2，PyPI 安装包使用 CUDA 12.1 运行库。已满足版本要求的依赖会复用。旧 Conda 环境只提供 Python 解释器。ViT-B 固定版本缓存在 `/data/user3/chenc/checkpoints/Vit/hub/`。
 
-先在 `/data/user3/chenc/datasets/` 查找并核验干净 CIFAR-10 和 CIFAR-100。缺失或损坏时，将官方数据下载到其 `CIFAR-clean/` 子目录。若父目录不可写且两个指定子目录尚不存在，`BALANCED_512_CREATE_ASSET_DIRS=1` 允许脚本通过 sudo 创建所需子目录。管理员也可以提前提供可写目录，此时省略该选项。脚本使用一个 GPU 串行执行，先跑 Smoke Test，再跑对应正式实验。
+先在 `/data/user3/chenc/datasets/` 查找并核验干净 CIFAR-10 和 CIFAR-100。缺失或损坏时，将官方数据下载到其 `CIFAR-clean/` 子目录。`BALANCED_512_CREATE_ASSET_DIRS=1` 允许脚本通过 sudo 创建两个专用子目录，或修正这两个目录本身的所有者。管理员也可以提前提供可写目录，此时省略该选项。脚本使用一个 GPU 串行执行，先跑 Smoke Test，再跑对应正式实验。
 
 默认结果位于仓库根目录下的 `results/balanced-512/`。报告是 `report.md`，逐流 CSV 是 `per_stream.csv`，实时日志位于 `logs/`。用 `BALANCED_512_OUTPUT` 可覆盖输出位置。
