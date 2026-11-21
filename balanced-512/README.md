@@ -23,3 +23,7 @@ python balanced-512/report.py
 没有干净 ImageNet 时，省略 `--source-root` 可执行 ImageNet-C 的 PLEAD。此时 PEA 留空并记录缺失源数据。提供源数据后可补跑，已有成功记录会跳过。环境变量 `BALANCED_512_OUTPUT` 可指定独立的输出目录，并用 `report.py --output` 汇总该目录。
 
 `results/full/` 保存配置、checkpoint 审计、共享划分索引和哈希、逐流 JSON 以及状态。正式汇总位于 `results/report.md` 与 `results/per_stream.csv`。Smoke Test 位于单独的 `results/smoke/`。
+
+如果相同版本的 checkpoint 未在 Hugging Face 缓存中，可执行
+`HF_HOME="${HF_HOME:-$HOME/.cache/neo-huggingface}" python balanced-512/prepare_models.py`。
+这个脚本只下载已固定提交的模型文件。评估入口仍从本地缓存严格加载。
