@@ -43,10 +43,18 @@ def build_stream(labels, dataset, ir, seed, policy="strict"):
     subset_order = rng.permutation(classes)
     counts = np.full((classes, classes), minority, dtype=np.int64)
     indices = np.empty((classes, size), dtype=np.int64)
+    # For the uniform IR, assign the cyclic supports independently of the
+    # nominal dominant class so the designated label is also sampled uniformly.
+    uniform_starts = rng.permutation(classes) if ir == 1 else None
     for pos, rank in enumerate(subset_order):
         quota = counts[pos]
-        quota[class_order[rank]] = diagonal
-        quota[class_order[(rank + np.arange(1, extra + 1)) % classes]] += 1
+        if uniform_starts is not None:
+            baseline, remainder = divmod(size, classes)
+            quota.fill(baseline)
+            quota[class_order[(uniform_starts[pos] + np.arange(remainder)) % classes]] += 1
+        else:
+            quota[class_order[rank]] = diagonal
+            quota[class_order[(rank + np.arange(1, extra + 1)) % classes]] += 1
         chosen = [rng.choice(pools[c], int(quota[c]), replace=False) for c in np.flatnonzero(quota)]
         indices[pos] = rng.permutation(np.concatenate(chosen))
     return OnlineIR(indices, class_order[subset_order], class_order, counts, ir / denom, 1 / denom), requested > diagonal

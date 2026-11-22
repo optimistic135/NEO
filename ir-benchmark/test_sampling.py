@@ -24,6 +24,10 @@ class Streams(unittest.TestCase):
             self.assertEqual(capped, ir >= 5000)
             self.assertEqual(stream.indices.shape, (1000, 100))
             self.assertTrue(np.all(np.diff(np.sort(stream.indices), axis=1) > 0))
+            if ir == 1:
+                np.testing.assert_array_equal(stream.counts.sum(0), np.full(1000, 100))
+                covered = stream.counts[np.arange(1000), stream.dominant_classes].sum()
+                self.assertGreater(covered, 0)
             for images, counts in zip(stream.indices, stream.counts):
                 np.testing.assert_array_equal(np.bincount(labels[images], minlength=1000), counts)
             self.assertEqual(list(map(len, stream.batches(64)))[:4], [64, 36, 64, 36])
