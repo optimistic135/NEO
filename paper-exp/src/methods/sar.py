@@ -6,6 +6,8 @@ from src.methods.base import Optimizing, configure_norm, entropy
 
 
 class SAR(Optimizing):
+    timing = "first-pass-prediction-before-sam-update"
+
     def __init__(self, model, cfg, batch):
         super().__init__(model)
         self.cfg = cfg

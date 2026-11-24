@@ -3,8 +3,8 @@
   "name": "NEO",
   "description": "Original cumulative sample-weighted latent mean and current-batch centered logits. No sliding window.",
   "upstream": {
-    "url": "https://github.com/optimistic135/NEO",
-    "commit": "f8480ae",
+    "url": "https://github.com/awesomealex1/NEO",
+    "commit": "cd8ac01c4d981aee274b77a07ebb0712dd54db98",
     "files": {}
   }
 }

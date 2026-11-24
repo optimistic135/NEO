@@ -4,6 +4,8 @@ from src.methods.base import Optimizing, configure_norm, entropy
 
 
 class TENT(Optimizing):
+    timing = "predict-before-update"
+
     def __init__(self, model, cfg, imagenet):
         super().__init__(model)
         self.params = configure_norm(self.model, True)

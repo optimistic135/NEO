@@ -5,6 +5,8 @@ from src.methods.base import Optimizing, configure_norm, entropy
 
 
 class ROID(Optimizing):
+    timing = "pre-update-logits-with-current-batch-prior"
+
     def __init__(self, model, cfg, imagenet, batch, augment):
         super().__init__(model)
         self.cfg, self.batch, self.augment = cfg, batch, augment
