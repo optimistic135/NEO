@@ -2,3 +2,5 @@ cifar10-c: {repo: nateraw/vit-base-patch16-224-cifar10, revision: b55eeb4221d3a5
 cifar100-c: {repo: avanishd/vit-base-patch16-224-in21k-finetuned-cifar100, revision: 1dc8766c25b7cd31b4bb90f1d2c9ae93f24a3e60, weights: model.safetensors}
 imagenet-c: {repo: timm/vit_base_patch16_224.augreg2_in21k_ft_in1k, revision: 063c6c38a5d8510b2e57df480445e94b231dad2c, weights: model.safetensors}
 cifar100_sha256: 72cf4efbf36856fcd177b99df77bb1a12b322d6bffa2042b7c5e234b4b98fab8
+cifar100_config_sha256: 60c29ee7ce826d69f35bcca8b76a1be219745d821c482ebaf435ee5ee67afaba
+cifar100_processor_sha256: 445c77049d082004aa07593344d5e1f521f1198228bf586196f70ce7ae021414

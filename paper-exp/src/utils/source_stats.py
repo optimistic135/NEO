@@ -8,15 +8,15 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR100
 from tqdm import tqdm
 
-from src.utils.settings import sha256 as file_sha256
+from src.utils.settings import HOME, sha256 as file_sha256
 
 
 @torch.no_grad()
 def source_stats(prompt, context):
     root = Path(context["clean_root"])
-    dataset = CIFAR100(root, train=True, transform=context["transform"], download=False)
     key = dict(checkpoint=context["audit"]["sha256"], preprocessing=context["audit"]["preprocessing"],
-               config=context["audit"].get("revision"), source_sha256=context["source_sha256"],
+               config=context["audit"]["model_config_sha256"], source_sha256=context["source_sha256"],
+               implementation_sha256=file_sha256(HOME / "src/models/prompt_interface.py"),
                stats="unprompted-all-block-cls-next-ln-fp64-unbiased")
     digest = sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()
     path = context["output"] / "source_stats" / f"{digest}.pt"
@@ -25,6 +25,7 @@ def source_stats(prompt, context):
         return torch.load(path, weights_only=True, map_location=device), 0.
     path.parent.mkdir(parents=True, exist_ok=True)
     start = perf_counter()
+    dataset = CIFAR100(root, train=True, transform=context["transform"], download=False)
     total = square = None
     seen = 0
     for images, _ in tqdm(DataLoader(dataset, batch_size=64), desc="Clean CIFAR-100 source statistics"):
@@ -39,7 +40,8 @@ def source_stats(prompt, context):
     value = (std, (total / seen).float())
     if not all(torch.isfinite(t).all() for t in value):
         raise ValueError("Non-finite clean source statistics")
-    torch.cuda.synchronize(device) if device.type == "cuda" else None
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
     seconds = perf_counter() - start
     tmp = path.with_suffix(".tmp")
     torch.save(tuple(t.cpu() for t in value), tmp)

@@ -1,4 +1,4 @@
-from src.methods.cotta_vit import CoTTA
+from src.methods.cotta import CoTTA
 from src.methods.deyo import DeYO
 from src.methods.foa import FOA
 from src.methods.fozo import FOZO
