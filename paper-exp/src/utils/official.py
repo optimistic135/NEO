@@ -32,7 +32,7 @@ def official_file(config, name):
 
 def module(config, name, replacements=(), **context):
     path = official_file(config, name)
-    key = f"paper_{config['id']}_{path.stem}"
+    key = f"paper_{config['id']}_{name.replace(chr(47), chr(95)).removesuffix('.py')}"
     if key in sys.modules:
         return sys.modules[key]
     source = path.read_text()

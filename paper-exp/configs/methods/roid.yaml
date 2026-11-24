@@ -1,0 +1,21 @@
+{
+  "id": "roid",
+  "name": "ROID",
+  "cifar_lr": 0.001,
+  "imagenet_lr": 0.00025,
+  "momentum": 0.9,
+  "source_momentum": 0.99,
+  "prior_momentum": 0.9,
+  "temperature": 0.3333333333333333,
+  "clip": 0.99,
+  "eps": 1e-05,
+  "description": "Official diversity and certainty weighting, likelihood-ratio and augmentation consistency losses, weight ensembling and logit prior correction. Scalar epsilon guard for constant batches; pixel-space augmentations.",
+  "upstream": {
+    "url": "https://github.com/mariodoebler/test-time-adaptation",
+    "commit": "8b2ed63255d906b6b0afaefc6ae630b9ec4bdaa1",
+    "paper": "https://arxiv.org/abs/2402.10297",
+    "files": {
+      "classification/augmentations/transforms_cotta.py": "cc41460c259b8745b27ce514d442d2f880e9b7bda7e7310eee1ad8356a89ccc4"
+    }
+  }
+}

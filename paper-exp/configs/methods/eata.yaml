@@ -1,0 +1,19 @@
+{
+  "id": "eata",
+  "name": "EATA",
+  "lr": 0.00025,
+  "momentum": 0.9,
+  "fisher_size": 2000,
+  "fisher_alpha": 2000.0,
+  "entropy_factor": 0.4,
+  "diversity_margin": 0.05,
+  "description": "Pinned EATA core with Fisher regularization. LayerNorm affine and entropy margin scaled by log(C); Fisher uses 2000 independent clean images and model pseudo-labels.",
+  "upstream": {
+    "url": "https://github.com/mr-eggplant/EATA",
+    "commit": "f739b3668cc7617e9b9f1979c1a358497a3472c3",
+    "paper": "https://proceedings.mlr.press/v162/niu22a.html",
+    "files": {
+      "eata.py": "f162467d300cb12a14a3c888f693b31d15b12cd116ba0edadfa6560fa8b6ef96"
+    }
+  }
+}

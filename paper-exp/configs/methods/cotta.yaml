@@ -12,7 +12,10 @@
     "paper": "https://openaccess.thecvf.com/content/CVPR2022/html/Wang_Continual_Test-Time_Domain_Adaptation_CVPR_2022_paper.html",
     "files": {
       "cifar/cotta.py": "bdaa5f1a6d9713f0042cce8ee8d2853cbee1cc996d16c076785ea3d8342265b4",
-      "cifar/my_transforms.py": "bc9a5138f78b1f5edc0329fa0219cfb363b362ff8511d625534cd980f26e6315"
+      "cifar/my_transforms.py": "bc9a5138f78b1f5edc0329fa0219cfb363b362ff8511d625534cd980f26e6315",
+      "imagenet/cotta.py": "5d21c1368be9bda3b6874976aabf47929f8600c830a6254c28b7f2076b3eb9df",
+      "imagenet/my_transforms.py": "c66bf6f172789c1ab05218a9bec58c301cc74378bfc8ed3175882e32961d563a"
     }
-  }
+  },
+  "imagenet_lr": 0.01
 }

@@ -8,5 +8,7 @@
     "commit": "e9e926a668d85244c66a6d5c006efbd2b82e83e8",
     "paper": "https://openreview.net/forum?id=uXl3bZLkr3c",
     "files": {}
-  }
+  },
+  "imagenet_lr": 0.001,
+  "momentum": 0.9
 }

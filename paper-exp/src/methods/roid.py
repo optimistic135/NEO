@@ -49,3 +49,16 @@ class ROID(Optimizing):
                 param.lerp_(source, 1-self.cfg["source_momentum"])
             smooth = max(1/len(images), 1/prob.shape[1]) / batch_prior.max()
             return logits.detach() * (batch_prior+smooth)/(1+smooth*prob.shape[1])
+
+
+def build_roid(model, cfg, context):
+    from src.utils.official import module
+
+    upstream = module(cfg, "classification/augmentations/transforms_cotta.py")
+    transform = upstream.get_tta_transforms(224, padding_mode="reflect", cotta_augs=False)
+    mean, std = (model.head.weight.new_tensor(x)[None, :, None, None] for x in model.normalization)
+
+    def augment(images):
+        return (transform(images * std + mean) - mean) / std
+
+    return ROID(model, cfg, context["dataset"] == "imagenet-c", context["batch_size"], augment)
