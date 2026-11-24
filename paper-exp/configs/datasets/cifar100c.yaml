@@ -1,0 +1,5 @@
+type: cifar_c
+root: /data/user3/chenc/datasets/CIFAR-100-C
+clean_root: /data/user3/chenc/datasets/CIFAR-clean
+classes: 100
+per_class: 100

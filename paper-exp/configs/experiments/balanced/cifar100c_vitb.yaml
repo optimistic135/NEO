@@ -1,0 +1,6 @@
+model: models/vit_base.yaml
+model_profile: cifar100-c
+dataset: datasets/cifar100c.yaml
+protocol: protocols/balanced_corruption.yaml
+methods: [no_adapt, tent, t3a, sar, cotta, deyo, lame, foa, fozo]
+output: results/cifar100c_balanced_vitb
