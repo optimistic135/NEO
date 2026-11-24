@@ -1,0 +1,15 @@
+{
+  "id": "foa",
+  "name": "FOA",
+  "description": "Official CMA-ES seed=2020, population=27, previous best candidate, feature objective and activation shifting. No quantization. Use clean CIFAR-100 instead of upstream ImageNet source.",
+  "num_prompts": 3,
+  "fitness_lambda": 0.4,
+  "upstream": {
+    "url": "https://github.com/mr-eggplant/FOA",
+    "commit": "004b02dab6a7c02afce1caa606afac525dd74f7e",
+    "paper": "https://arxiv.org/abs/2404.01650",
+    "files": {
+      "tta_library/foa.py": "acd96e03ae08e155cb7df92c6a16aef56ee5b73ceffeabefe221249627c70872"
+    }
+  }
+}

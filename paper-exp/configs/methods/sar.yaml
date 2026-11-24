@@ -1,0 +1,17 @@
+{
+  "id": "sar",
+  "name": "SAR",
+  "description": "Both entropy filters, SAM and entropy recovery retained. Map the upstream blocks 9\u201311/final norm exclusions to HF names; use 0.4 ln(C). Safely skip empty filters and undo any perturbation.",
+  "vit_lr_per_64": 0.001,
+  "momentum": 0.9,
+  "rho": 0.05,
+  "entropy_margin_factor": 0.4,
+  "reset_entropy": 0.2,
+  "recovery_momentum": 0.9,
+  "upstream": {
+    "url": "https://github.com/mr-eggplant/SAR",
+    "commit": "20f6e24b17525f34503510afccedc0629b67b7c4",
+    "paper": "https://openreview.net/forum?id=g2YraF75Tj",
+    "files": {}
+  }
+}

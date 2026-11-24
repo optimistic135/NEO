@@ -1,0 +1,18 @@
+{
+  "id": "cotta",
+  "name": "CoTTA",
+  "description": "Official CIFAR EMA teacher, anchor, 32-view averaging and stochastic restoration. Adapt official CIFAR augmentation to 224px ViT inputs and perform it in pixel space; restore normalized inputs for the model.",
+  "lr": 0.001,
+  "mt": 0.999,
+  "rst": 0.01,
+  "ap": 0.92,
+  "upstream": {
+    "url": "https://github.com/qinenergy/cotta",
+    "commit": "c212a204b32be4005092e4323105a24a29ad2952",
+    "paper": "https://openaccess.thecvf.com/content/CVPR2022/html/Wang_Continual_Test-Time_Domain_Adaptation_CVPR_2022_paper.html",
+    "files": {
+      "cifar/cotta.py": "bdaa5f1a6d9713f0042cce8ee8d2853cbee1cc996d16c076785ea3d8342265b4",
+      "cifar/my_transforms.py": "bc9a5138f78b1f5edc0329fa0219cfb363b362ff8511d625534cd980f26e6315"
+    }
+  }
+}

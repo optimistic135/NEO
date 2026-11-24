@@ -1,0 +1,12 @@
+{
+  "id": "t3a",
+  "name": "T3A",
+  "description": "Use frozen ViT CLS features and the published support classifier. K=20 is one of the upstream candidate values, fixed without target labels.",
+  "filter_k": 20,
+  "upstream": {
+    "url": "https://github.com/matsuolab/T3A",
+    "commit": "ff8cde5f06f61035c957720c6275c33893e0f564",
+    "paper": "https://openreview.net/forum?id=e_yvNqkJKAW",
+    "files": {}
+  }
+}

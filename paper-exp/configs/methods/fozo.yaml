@@ -1,0 +1,18 @@
+{
+  "id": "fozo",
+  "name": "FOZO",
+  "description": "Official SPSA, dynamic optimizer schedule, shallow/deep objective and historical shift. No quantization. Use clean CIFAR-100 instead of upstream ImageNet source.",
+  "num_prompts": 3,
+  "fitness_lambda": 0.4,
+  "zo_eps": 0.5,
+  "lr": 0.08,
+  "n_spsa": 1,
+  "upstream": {
+    "url": "https://github.com/eVI-group-SCU/FOZO",
+    "commit": "5bc3e5ca8194ff54e6cc1e334ecbf22d869b9a76",
+    "paper": "https://openaccess.thecvf.com/content/CVPR2026/html/Wang_FOZO_Forward-Only_Zeroth-Order_Prompt_Optimization_for_Test-Time_Adaptation_CVPR_2026_paper.html",
+    "files": {
+      "tta_library/FOZO.py": "f5bd7d59d00b47a5974e56c9ba17c29a71aac4f4dddec5335185ad8c702ddf29"
+    }
+  }
+}

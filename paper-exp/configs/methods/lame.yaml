@@ -1,0 +1,17 @@
+{
+  "id": "lame",
+  "name": "LAME",
+  "description": "Use the upstream graph builder and Laplacian optimizer on normalized ViT CLS features. Graph inference runs independently on each validation batch without carrying state.",
+  "affinity": "kNN",
+  "knn": 5,
+  "sigma": 1.0,
+  "force_symmetry": true,
+  "upstream": {
+    "url": "https://github.com/fiveai/LAME",
+    "commit": "d2e5f63090bc1c8129bf7cbd781029a5955e1a67",
+    "paper": "https://arxiv.org/abs/2201.05718",
+    "files": {
+      "src/adaptation/lame.py": "f16ed39c95e88f5803340e4b8ad982013170cf7a4406bf5967b2ff921d743123"
+    }
+  }
+}

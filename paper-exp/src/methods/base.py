@@ -22,6 +22,15 @@ class Adapter:
     def reset(self):
         self.forward_passes = self.backward_passes = 0
 
+    def step(self, images):
+        return self.update(images)
+
+    def get_state(self):
+        return dict(timing=self.timing, forward_passes=self.forward_passes,
+                    backward_passes=self.backward_passes,
+                    trainable_parameters=self.trainable_parameters,
+                    events=getattr(self, "events", {}))
+
     def update(self, images):
         return self.predict(images)
 

@@ -1,0 +1,5 @@
+{
+  "id": "no_adapt",
+  "name": "Frozen checkpoint",
+  "description": "Single forward with frozen weights."
+}

@@ -1,0 +1,12 @@
+{
+  "id": "tent",
+  "name": "TENT",
+  "description": "Retain CIFAR example Adam and one entropy step; update ViT LayerNorm affine only instead of BatchNorm. Return initial batch logits.",
+  "cifar_lr": 0.001,
+  "upstream": {
+    "url": "https://github.com/DequanWang/tent",
+    "commit": "e9e926a668d85244c66a6d5c006efbd2b82e83e8",
+    "paper": "https://openreview.net/forum?id=uXl3bZLkr3c",
+    "files": {}
+  }
+}

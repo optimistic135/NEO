@@ -1,0 +1,26 @@
+{
+  "id": "deyo",
+  "name": "DeYO",
+  "description": "Official entropy and PLPD selection and weighting with patch shuffle; no targets passed. Match ViT normalization exclusions and rescale entropy margins by ln(C).",
+  "lr": 0.001,
+  "momentum": 0.9,
+  "filter_margin": 0.5,
+  "weight_margin": 0.4,
+  "selection": {
+    "aug_type": "patch",
+    "patch_len": 4,
+    "plpd_threshold": 0.2,
+    "filter_ent": 1,
+    "filter_plpd": 1,
+    "reweight_ent": 1,
+    "reweight_plpd": 1
+  },
+  "upstream": {
+    "url": "https://github.com/Jhyun17/DeYO",
+    "commit": "3d7d2897d864907571ef75edf31f0028d53f1432",
+    "paper": "https://openreview.net/forum?id=9w3iw8wDuE",
+    "files": {
+      "methods/deyo.py": "f1510bd283e96e159c051dd5ce835a87fb7b3c7dab9f05f99a822e0d04cc14d7"
+    }
+  }
+}

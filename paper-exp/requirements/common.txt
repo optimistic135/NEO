@@ -1,0 +1,4 @@
+-r ../../balanced-512/requirements-server.txt
+torch==2.1.2
+torchvision==0.16.2
+matplotlib==3.9.4
