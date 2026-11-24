@@ -3,5 +3,5 @@ severity: 5
 seeds: [1234, 2020, 9999]
 batch_size: 64
 adaptation: 512
-validation: 500
+validation: remainder
 corruptions: [gaussian_noise, shot_noise, impulse_noise, defocus_blur, glass_blur, motion_blur, zoom_blur, snow, frost, fog, brightness, contrast, elastic_transform, pixelate, jpeg_compression]

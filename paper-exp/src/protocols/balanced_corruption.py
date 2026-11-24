@@ -1,28 +1,22 @@
-from hashlib import sha256
+"""Use exactly the same seeded split as the existing balanced-512 benchmark."""
+
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
 import numpy as np
 
 
+_ROOT = Path(__file__).resolve().parents[3]
+_spec = spec_from_file_location("balanced_512_protocol", _ROOT / "balanced-512/protocol.py")
+_shared = module_from_spec(_spec)
+_spec.loader.exec_module(_shared)
+digest = _shared.split_hash
+
+
 def build_split(labels, classes, seed, adaptation, validation):
-    """Reserve the equal validation quota, then apportion the adaptation remainder."""
     labels = np.asarray(labels)
     if labels.ndim != 1 or labels.dtype.kind not in "iu" or set(labels) != set(range(classes)):
         raise ValueError("Unexpected label space")
-    if min(adaptation, validation) <= 0 or validation % classes:
-        raise ValueError("Validation requires an equal positive quota per class")
-    rng = np.random.default_rng(seed)
-    base, remainder = divmod(adaptation, classes)
-    adapt, valid = [], []
-    per_class = validation // classes
-    for order, label in enumerate(rng.permutation(classes)):
-        pool = rng.permutation(np.flatnonzero(labels == label))
-        samples = base + (order < remainder)
-        if len(pool) < per_class + samples:
-            raise ValueError(f"Insufficient samples for class {label}")
-        valid.extend(pool[:per_class])
-        adapt.extend(pool[per_class:per_class + samples])
-    return rng.permutation(adapt), rng.permutation(valid)
-
-
-def digest(indices):
-    return sha256(np.asarray(indices, dtype="<i8").tobytes()).hexdigest()
+    if adaptation <= 0 or validation != "remainder":
+        raise ValueError("balanced-512 reserves every remaining image for validation")
+    return _shared.split(labels, seed, adaptation)
