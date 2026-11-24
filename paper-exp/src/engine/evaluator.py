@@ -11,8 +11,9 @@ def sync(device):
 
 
 @torch.no_grad()
-def evaluate(method, data, indices, batch_size, device, phase, title):
-    loader = DataLoader(Subset(data, indices.tolist()), batch_size=batch_size)
+def evaluate(method, data, indices, batch_size, device, phase, title, *, batch_sampler=None):
+    loader = (DataLoader(Subset(data, indices.tolist()), batch_size=batch_size) if batch_sampler is None
+              else DataLoader(data, batch_sampler=batch_sampler))
     step = method.step if phase == "adaptation" else method.predict
     if phase == "validation":
         method.model.eval()

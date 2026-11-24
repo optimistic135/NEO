@@ -1,0 +1,19 @@
+methods: [no_adapt, tent, sar, cotta, eata, deyo, lame, neo, roid]
+datasets:
+  cifar10-c:
+    root: /data/user3/chenc/datasets/CIFAR-10-C
+    per_class: 1000
+    sha256: 5888ea39698a0fe8bb8ddeb8b41aa0d62e26585bcfc119948be1999d1fc49698
+  cifar100-c:
+    root: /data/user3/chenc/datasets/CIFAR-100-C
+    per_class: 100
+    sha256: 72cf4efbf36856fcd177b99df77bb1a12b322d6bffa2042b7c5e234b4b98fab8
+  imagenet-c:
+    root: /data/user3/chenc/datasets/ImageNet-C
+    per_class: 50
+    sha256: 32aa17d6e17b43500f531d5f6dc9bc93e56ed8841b8a75682e1bb295d722405b
+clean_cifar_root: /data/user3/chenc/datasets/CIFAR-clean
+batch_size: 64
+severity: 5
+seeds: [1234, 2020, 9999]
+output: results/ir_baselines
