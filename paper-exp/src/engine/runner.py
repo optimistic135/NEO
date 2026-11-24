@@ -1,6 +1,5 @@
 from collections import Counter, defaultdict
 from importlib.metadata import version
-import random
 from pathlib import Path
 from time import perf_counter
 import traceback
@@ -24,6 +23,7 @@ from src.methods.t3a import T3A
 from src.methods.tent import TENT
 from src.metrics.scoring import Metrics
 from src.models.loading import load
+from src.utils.seed import seed_everything
 from src.utils.settings import REPO, config, revision, save
 from src.utils.upstream import load_upstream
 
@@ -31,12 +31,6 @@ from src.utils.upstream import load_upstream
 def sync(device):
     if device.type == "cuda":
         torch.cuda.synchronize(device)
-
-
-def seed_everything(seed):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
 
 
 def adapter_for(method, model, dataset, spec, transform, seed, upstream, cfg, smoke):

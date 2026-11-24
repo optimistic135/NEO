@@ -11,7 +11,7 @@ import torch
 from src.datasets.cifar_c import load_cifar_c
 from src.engine.benchmark_report import summarize
 from src.engine.evaluator import evaluate, sync
-from src.engine.runner import seed_everything
+from src.utils.seed import seed_everything
 from src.methods.registry import setup
 from src.models.registry import MODELS
 from src.protocols.balanced_corruption import build_split, digest
@@ -72,7 +72,10 @@ def run_locked(args, cfg, dataset, protocol, method_cfg, destination):
         raise
     source_file = Path(dataset["clean_root"]) / "cifar-100-python/train"
     source_hash = clean_digest(dataset["clean_root"]) if source_file.is_file() else None
-    snapshot = dict(git=revision(REPO), source_sha256=source_hash, checkpoint=audit, dataset=dataset, protocol=protocol,
+    checkout_git = revision(REPO)
+    deployed = HOME / ".deployed-revision"
+    code_git = deployed.read_text().strip() if deployed.is_file() else checkout_git
+    snapshot = dict(git=code_git, checkout_git=checkout_git, source_sha256=source_hash, checkpoint=audit, dataset=dataset, protocol=protocol,
                     dataset_audit=files, methods=method_cfg, experiment=cfg,
                     dependencies={k: version(k) for k in ("torch", "torchvision", "transformers",
                                                             "numpy", "matplotlib", "timm")},

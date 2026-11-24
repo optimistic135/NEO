@@ -1,6 +1,6 @@
 # CIFAR-100-C · ViT-B/16 · balanced-512
 
-新入口为 `scripts/run_cifar100c.sh`。它使用实验 YAML 组合模型、CIFAR-C 数据、采样协议和每个方法的配置。这里只新增 CIFAR-100-C、ViT-B/16 和 balanced corruption。原来的 `bench.py` 是历史入口，保留供旧结果复现。
+新入口为 `scripts/run_cifar100c.sh`。它使用实验 YAML 组合模型、CIFAR-C 数据、采样协议和每个方法的配置。这里只新增 CIFAR-100-C、ViT-B/16 和 balanced corruption。原来的 `bench.py` 是历史入口，保留供旧结果复现。新 CIFAR-C 入口直接加载 CIFAR 数组，不加载历史跨数据集 runner 或 `cap_experiments`。
 
 ## 协议
 

@@ -10,7 +10,6 @@ from transformers import ViTForImageClassification, ViTImageProcessor
 from safetensors.torch import load_file
 from huggingface_hub import try_to_load_from_cache
 
-from dataset.selectedRotateImageFolder import te_transforms_imageC
 from src.utils.settings import config, sha256
 
 
@@ -73,6 +72,8 @@ def load(dataset, architecture, classes):
         path = cached(spec["repo"], spec["weights"], spec["revision"])
         extra.update(spec)
         if dataset == "imagenet-c":
+            from dataset.selectedRotateImageFolder import te_transforms_imageC
+
             network = timm.create_model("vit_base_patch16_224", pretrained=False)
             network.load_state_dict(load_file(str(path)), strict=True)
             transform, head, kind = te_transforms_imageC, "head", "timm-safetensors"
