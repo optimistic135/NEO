@@ -13,6 +13,7 @@ import torch
 
 from src.data.dart import data_digest
 from src.data.streams import load_data
+from src.engine.online_resume import can_resume_without_cotta
 from src.engine.evaluator import evaluate, sync
 from src.methods.eata import SourceRequired
 from src.methods.registry import setup
@@ -40,23 +41,25 @@ def run(args):
     cfg = config("experiments/online_ir/baselines.yaml")
     output = Path(args.output or HOME / cfg["output"]) / args.capacity_policy
     output.mkdir(parents=True, exist_ok=True)
-    with (output / ".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        selected = args.methods or cfg["methods"]
-        if not set(selected) <= set(cfg["methods"]):
-            raise ValueError("Unknown baseline")
-        devices = torch.device(args.device)
-        failed = False
-        chosen = list(DESIGN) if args.dataset == "all" else [args.dataset]
-        for name in chosen:
+    selected = args.methods or cfg["methods"]
+    if not set(selected) <= set(cfg["methods"]):
+        raise ValueError("Unknown baseline")
+    device = torch.device(args.device)
+    failed = False
+    chosen = list(DESIGN) if args.dataset == "all" else [args.dataset]
+    for name in chosen:
+        with (output / f".{name}.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             try:
-                failed |= run_dataset(args, cfg, output, selected, name, devices)
+                failed |= run_dataset(args, cfg, output, selected, name, device)
             except Exception as error:
                 save(output / "logs" / f"{name}.json", dict(error=str(error), traceback=traceback.format_exc()))
                 print(f"{name}: {error}", file=sys.stderr, flush=True)
                 failed = True
+        with (output / ".report.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
             summarize(output, cfg, args.reference)
-        return int(failed)
+    return int(failed)
 
 
 def run_dataset(args, cfg, output, selected, name, device):
@@ -84,8 +87,18 @@ def run_dataset(args, cfg, output, selected, name, device):
                     methods=method_cfg, device=torch.cuda.get_device_name(device) if device.type == "cuda" else "cpu",
                     versions={p: version(p) for p in ("torch", "torchvision", "transformers", "timm", "numpy")})
     path = output / "configuration" / f"{name}.json"
-    if path.exists() and json.loads(path.read_text()) != json.loads(json.dumps(snapshot)):
-        raise ValueError(f"Configuration changed for {name}; use a fresh --output")
+    if path.exists():
+        previous = json.loads(path.read_text())
+        current = json.loads(json.dumps(snapshot))
+        if previous != current:
+            prior_success = any(
+                json.loads(p.read_text())["status"] == "ok"
+                for stage in ("smoke", "full") for p in (output / stage / "raw" / name).glob("*/roid.json")
+            )
+            if not can_resume_without_cotta(previous, current, prior_success):
+                raise ValueError(f"Configuration changed for {name}; use a fresh --output")
+            backup = output / "configuration" / "previous" / f"{name}-{previous['code_git'][:7]}.json"
+            save(backup, previous)
     save(path, snapshot)
     with torch.no_grad():
         model(torch.zeros(cfg["batch_size"], 3, 224, 224, device=device))

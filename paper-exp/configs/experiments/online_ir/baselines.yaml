@@ -1,4 +1,4 @@
-methods: [no_adapt, tent, sar, cotta, eata, deyo, lame, neo, roid]
+methods: [no_adapt, tent, sar, eata, deyo, lame, neo, roid]
 datasets:
   cifar10-c:
     root: /data/user3/chenc/datasets/CIFAR-10-C

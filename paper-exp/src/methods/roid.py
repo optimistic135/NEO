@@ -10,6 +10,9 @@ class ROID(Optimizing):
     def __init__(self, model, cfg, imagenet, batch, augment):
         super().__init__(model)
         self.cfg, self.batch, self.augment = cfg, batch, augment
+        self.eps = float(cfg["eps"])
+        if not 0 < self.eps < 1:
+            raise ValueError("ROID eps must be between 0 and 1")
         self.params = configure_norm(self.model, True)
         self.optimizer = (torch.optim.SGD(self.params, lr=cfg["imagenet_lr"], momentum=cfg["momentum"])
                           if imagenet else torch.optim.Adam(self.params, lr=cfg["cifar_lr"]))
@@ -26,7 +29,7 @@ class ROID(Optimizing):
     def update(self, images):
         logits = self.predict(images)
         prob = logits.softmax(1)
-        eps = self.cfg["eps"]
+        eps = self.eps
         with torch.no_grad():
             diversity = 1 - F.cosine_similarity(self.prior[None], prob, dim=1)
             diversity = (diversity-diversity.min()) / (diversity.max()-diversity.min()).clamp_min(eps)

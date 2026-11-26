@@ -26,7 +26,7 @@ def matches(left, right):
 def summarize(output, cfg, reference):
     from src.engine.online_benchmark import DESIGN
 
-    own = read_rows(output)
+    own = [row for row in read_rows(output) if row["method"] in cfg["methods"]]
     candidates = read_rows(reference / output.name)
     known = {}
     for r in own:
@@ -54,7 +54,7 @@ def summarize(output, cfg, reference):
     expected = len(corruptions) * len(cfg["seeds"])
     lines = ["# Online IR · TTA baselines", "",
              "ViT-B/16，severity 5，15 种扰动，三个共享种子。使用 PEA／PLEAD 的在线 IR 采样，64 张批次上限与子集尾批。",
-             "适应状态跨子集传递，各方法保留官方预测时序。表中只展示完整 45 流的 mean ± sample std。",
+             "适应状态跨子集传递，各方法保留官方预测时序。CoTTA 已退出此对比，历史原始记录保留。表中只展示完整 45 流的 mean ± sample std。",
              "完整 EATA 使用独立干净数据估计 Fisher。NEO 使用官方累计重心。ImageNet-C 容量不足的档位单独计数。", "",
              f"采样策略 {output.name}。已匹配历史 PEA／PLEAD 逐流结果 {len(admitted)} 条，排除哈希不匹配的结果 {mismatch} 条。", ""]
     combined_index = {}

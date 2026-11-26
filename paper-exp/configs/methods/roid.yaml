@@ -8,7 +8,7 @@
   "prior_momentum": 0.9,
   "temperature": 0.3333333333333333,
   "clip": 0.99,
-  "eps": 1e-05,
+  "eps": 0.00001,
   "description": "Official diversity and certainty weighting, likelihood-ratio and augmentation consistency losses, weight ensembling and logit prior correction. Scalar epsilon guard for constant batches; pixel-space augmentations.",
   "upstream": {
     "url": "https://github.com/mariodoebler/test-time-adaptation",
